@@ -1,0 +1,1 @@
+/workspace/kompass-core/src/kompass_cpp/tests/pointcloud_scan_plt.py

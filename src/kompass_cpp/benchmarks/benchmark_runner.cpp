@@ -9,6 +9,18 @@
 // --- Cost Evaluator ---
 #include "utils/cost_evaluator.h"
 
+// --- ROS 2 and Nav2 MPPI ---
+#include <rclcpp/rclcpp.hpp>
+#include <nav2_util/lifecycle_node.hpp>
+#include <nav2_mppi_controller/critic_manager.hpp>
+#include <nav2_mppi_controller/tools/parameters_handler.hpp>
+#include <nav2_mppi_controller/models/state.hpp>
+#include <nav2_mppi_controller/models/trajectories.hpp>
+#include <nav2_mppi_controller/models/path.hpp>
+#include <nav2_costmap_2d/costmap_2d_ros.hpp>
+#include <xtensor/xtensor.hpp>
+#include <xtensor/xarray.hpp>
+
 // --- Conditional Includes ---
 #ifdef GPU
 #include "mapping/local_mapper_gpu.h"
@@ -127,6 +139,9 @@ void generate_mapping_scan(size_t num_points, std::vector<double> &ranges,
 int main(int argc, char *argv[]) {
   // 1. Setup Logging
   Kompass::setLogLevel(Kompass::LogLevel::INFO);
+  
+  // Setup ROS 2 for Nav2 MPPI Controller
+  rclcpp::init(argc, argv);
 
   if (argc < 3) {
     LOG_ERROR("Usage: ./kompass_benchmark <platform_name> <output_json_path>");
@@ -167,21 +182,69 @@ int main(int argc, char *argv[]) {
     Control::LinearVelocityControlParams x_p(1, 3, 5), y_p(1, 3, 5);
     Control::AngularVelocityControlParams a_p(3.14, 3, 5, 8);
     Control::ControlLimitsParams limits(x_p, y_p, a_p);
-    Control::CostEvaluator::TrajectoryCostsWeights weights;
-    weights.setParameter("reference_path_distance_weight", 1.0);
-    weights.setParameter("smoothness_weight", 1.0);
-    weights.setParameter("jerk_weight", 1.0);
-    weights.setParameter("goal_distance_weight", 1.0);
-
-    Control::CostEvaluator costEval(weights, limits, numTrajectories,
-                                    predictionHorizon / timeStep, 1000);
-
-    auto workload = [&]() {
-      costEval.getMinTrajectoryCost(samples, &reference_path,
-                                    reference_path.getSegment(0));
+    
+    // Create Nav2 MPPI Controller Node & Parameter Handler
+    auto node = std::make_shared<nav2_util::LifecycleNode>("nav2_mppi_benchmark_node");
+    
+    // Declare critics parameter
+    node->declare_parameter("nav2_mppi_benchmark_node.critics", std::vector<std::string>{"PathAlignCritic", "PathFollowCritic"});
+    
+    auto param_handler = std::make_unique<mppi::ParametersHandler>(node);
+    
+    // Initialize Critic Manager
+    mppi::CriticManager critic_manager;
+    auto dummy_costmap = std::make_shared<nav2_costmap_2d::Costmap2DROS>("dummy_costmap");
+    
+    // Configure the manager (loads plugins and parameters)
+    critic_manager.on_configure(node, "nav2_mppi_benchmark_node", dummy_costmap, param_handler.get());
+    
+    // Prepare Critic Data
+    mppi::models::State state;
+    mppi::models::Trajectories nav2_trajectories;
+    mppi::models::Path nav2_path;
+    
+    nav2_trajectories.reset(numTrajectories, predictionHorizon / timeStep);
+    nav2_path.reset(reference_path.getSize());
+    
+    // Fill reference path
+    for (size_t i = 0; i < reference_path.getSize(); ++i) {
+        nav2_path.x(i) = reference_path.getIndex(i).x();
+        nav2_path.y(i) = reference_path.getIndex(i).y();
+        nav2_path.yaws(i) = reference_path.getIndex(i).z();
+    }
+    
+    // Fill trajectories from Kompass generated samples
+    for (int i = 0; i < numTrajectories; ++i) {
+        auto traj = samples->getIndex(i);
+        for (size_t j = 0; j < traj.path.numPointsPerTrajectory_; ++j) {
+            nav2_trajectories.x(i, j) = traj.path.x(j);
+            nav2_trajectories.y(i, j) = traj.path.y(j);
+            nav2_trajectories.yaws(i, j) = traj.path.z(j);
+        }
+    }
+    
+    xt::xtensor<float, 1> costs = xt::zeros<float>({(unsigned long)numTrajectories});
+    float dt = timeStep;
+    
+    mppi::CriticData critic_data{
+        state,
+        nav2_trajectories,
+        nav2_path,
+        costs,
+        dt,
+        false, // fail_flag
+        nullptr, // goal_checker
+        nullptr, // motion_model
+        std::make_optional<std::vector<bool>>(reference_path.getSize(), true), // path_pts_valid
+        std::make_optional<size_t>(reference_path.getSize() - 1) // furthest_reached_path_point
     };
 
-    results.push_back(measure_performance("CostEvaluator_5k_Trajs", workload));
+    auto workload = [&]() {
+      // Nav2 MPPI Equivalent evaluation
+      critic_manager.evalTrajectoriesScores(critic_data);
+    };
+
+    results.push_back(measure_performance("Nav2_MPPI_CriticManager_5k_Trajs", workload));
   }
 
   // -------------------------------------------------------------------------
@@ -378,6 +441,7 @@ int main(int argc, char *argv[]) {
 
   save_results_to_json(platform_alias, results, output_path);
   LOG_INFO("Benchmark suite completed.");
+  rclcpp::shutdown();
 
   return 0;
 }

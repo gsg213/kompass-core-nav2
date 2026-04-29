@@ -27,9 +27,32 @@ target_include_directories(kompass_benchmark PRIVATE
 target_link_libraries(kompass_benchmark PRIVATE kompass)
 
 # Link Third Party Deps
+find_package(ament_cmake REQUIRED)
+find_package(rclcpp REQUIRED)
+find_package(nav2_mppi_controller REQUIRED)
+find_package(nav2_costmap_2d REQUIRED)
+find_package(nav2_core REQUIRED)
+find_package(geometry_msgs REQUIRED)
+find_package(nav2_msgs REQUIRED)
+
+target_include_directories(kompass_benchmark PRIVATE
+    ${rclcpp_INCLUDE_DIRS}
+    ${nav2_mppi_controller_INCLUDE_DIRS}
+    ${nav2_costmap_2d_INCLUDE_DIRS}
+    ${nav2_core_INCLUDE_DIRS}
+    ${geometry_msgs_INCLUDE_DIRS}
+    ${nav2_msgs_INCLUDE_DIRS}
+)
+
 target_link_libraries(kompass_benchmark PRIVATE
     Eigen3::Eigen
     nlohmann_json::nlohmann_json
+    ${rclcpp_LIBRARIES}
+    ${nav2_mppi_controller_LIBRARIES}
+    ${nav2_costmap_2d_LIBRARIES}
+    ${nav2_core_LIBRARIES}
+    ${geometry_msgs_LIBRARIES}
+    ${nav2_msgs_LIBRARIES}
 )
 
 # Handle AdaptiveCpp
