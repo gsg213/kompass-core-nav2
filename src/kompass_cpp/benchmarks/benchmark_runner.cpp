@@ -20,6 +20,7 @@
 #include <nav2_costmap_2d/costmap_2d_ros.hpp>
 #include <xtensor/xtensor.hpp>
 #include <xtensor/xarray.hpp>
+#include <bonxai_map/probabilistic_map.hpp>
 
 // --- Conditional Includes ---
 #ifdef GPU
@@ -277,6 +278,34 @@ int main(int argc, char *argv[]) {
 #endif
 
     results.push_back(measure_performance("Mapper_Dense_400x400", workload));
+
+    // --- Bonxai Integration ---
+    {
+        // 1. Data Conversion Helper
+        std::vector<Bonxai::ProbabilisticMap::Vector3D> bonxai_points;
+        bonxai_points.reserve(ranges.size());
+        for (size_t i = 0; i < ranges.size(); ++i) {
+            double r = ranges[i];
+            double a = angles[i];
+            bonxai_points.push_back({r * std::cos(a), r * std::sin(a), 0.0});
+        }
+        Bonxai::ProbabilisticMap::Vector3D sensor_origin = {0.0, 0.0, 0.0};
+
+        // 2. Setup Probabilistic Map
+        Bonxai::ProbabilisticMap::Options options;
+        options.prob_hit_log = Bonxai::ProbabilisticMap::logods(0.6f);
+        options.prob_miss_log = Bonxai::ProbabilisticMap::logods(0.4f);
+        options.clamp_max_log = Bonxai::ProbabilisticMap::logods(0.9f);
+        options.clamp_min_log = Bonxai::ProbabilisticMap::logods(0.1f);
+        
+        Bonxai::ProbabilisticMap bonxai_map(0.05);
+        bonxai_map.setOptions(options);
+        
+        auto bonxai_workload = [&]() {
+            bonxai_map.insertPointCloud(bonxai_points, sensor_origin, 20.0);
+        };
+        results.push_back(measure_performance("Bonxai_Dense_400x400", bonxai_workload));
+    }
   }
 
   // -------------------------------------------------------------------------

@@ -23,7 +23,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libeigen3-dev \
     nlohmann-json3-dev \
     libboost-all-dev \
-    libopencv-dev \    
+    libopencv-dev \
+    libpcl-dev \    
     python3 \
     pip \
     sudo \

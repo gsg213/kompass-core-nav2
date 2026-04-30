@@ -34,6 +34,15 @@ find_package(nav2_costmap_2d REQUIRED)
 find_package(nav2_core REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(nav2_msgs REQUIRED)
+find_package(PCL REQUIRED)
+
+include(FetchContent)
+FetchContent_Declare(
+  bonxai
+  GIT_REPOSITORY https://github.com/facontidavide/Bonxai.git
+  GIT_TAG main
+)
+FetchContent_MakeAvailable(bonxai)
 
 target_include_directories(kompass_benchmark PRIVATE
     ${rclcpp_INCLUDE_DIRS}
@@ -53,6 +62,9 @@ target_link_libraries(kompass_benchmark PRIVATE
     ${nav2_core_LIBRARIES}
     ${geometry_msgs_LIBRARIES}
     ${nav2_msgs_LIBRARIES}
+    ${PCL_LIBRARIES}
+    bonxai_core
+    bonxai_map
 )
 
 # Handle AdaptiveCpp
