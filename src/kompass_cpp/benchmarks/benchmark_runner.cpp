@@ -19,8 +19,14 @@
 #include <nav2_mppi_controller/models/path.hpp>
 #include <nav2_costmap_2d/costmap_2d_ros.hpp>
 #include <xtensor/xtensor.hpp>
-#include <xtensor/xarray.hpp>
 #include <bonxai_map/probabilistic_map.hpp>
+#include <nav2_collision_monitor/polygon.hpp>
+#include <nav2_collision_monitor/pointcloud.hpp>
+#include <nav2_collision_monitor/scan.hpp>
+#include <nav2_collision_monitor/types.hpp>
+#include <sensor_msgs/msg/point_cloud2.hpp>
+#include <sensor_msgs/msg/laser_scan.hpp>
+#include <geometry_msgs/msg/transform_stamped.hpp>
 
 // --- Conditional Includes ---
 #ifdef GPU
@@ -136,6 +142,42 @@ void generate_mapping_scan(size_t num_points, std::vector<double> &ranges,
 // =================================================================================
 // 2. MAIN RUNNER
 // =================================================================================
+
+std::vector<nav2_collision_monitor::Point> make_arc_polygon(double radius, double angle_deg, int segments = 30) {
+    std::vector<nav2_collision_monitor::Point> poly;
+    poly.push_back({0.0, 0.0});
+    double half_angle = (angle_deg / 2.0) * M_PI / 180.0;
+    double step = (2.0 * half_angle) / segments;
+    for (int i = 0; i <= segments; ++i) {
+        double a = -half_angle + i * step;
+        poly.push_back({radius * std::cos(a), radius * std::sin(a)});
+    }
+    return poly;
+}
+
+class DummyPointCloud : public nav2_collision_monitor::PointCloud {
+public:
+    using PointCloud::PointCloud;
+    void injectData(sensor_msgs::msg::PointCloud2::ConstSharedPtr msg) {
+        dataCallback(msg);
+    }
+};
+
+class DummyScan : public nav2_collision_monitor::Scan {
+public:
+    using Scan::Scan;
+    void injectData(sensor_msgs::msg::LaserScan::ConstSharedPtr msg) {
+        dataCallback(msg);
+    }
+};
+
+class DummyPolygon : public nav2_collision_monitor::Polygon {
+public:
+    using Polygon::Polygon;
+    void injectPolygon(const std::vector<nav2_collision_monitor::Point>& points) {
+        poly_ = points;
+    }
+};
 
 int main(int argc, char *argv[]) {
   // 1. Setup Logging
@@ -357,6 +399,8 @@ int main(int argc, char *argv[]) {
   }
 #endif
 
+
+
   // -------------------------------------------------------------------------
   // TEST 3: CRITICAL ZONE (Point Cloud)
   // -------------------------------------------------------------------------
@@ -401,6 +445,65 @@ int main(int argc, char *argv[]) {
     };
 
     results.push_back(measure_performance("CriticalZone_100k_Cloud", workload));
+
+    // --- Nav2 Collision Monitor Integration (TEST 3) ---
+    {
+        auto node = std::make_shared<nav2_util::LifecycleNode>("cm_node_3");
+        auto tf_buffer = std::make_shared<tf2_ros::Buffer>(node->get_clock());
+        tf_buffer->setUsingDedicatedThread(true);
+
+        geometry_msgs::msg::TransformStamped tf_stamped;
+        tf_stamped.header.stamp = node->get_clock()->now();
+        tf_stamped.header.frame_id = "base_link";
+        tf_stamped.child_frame_id = "sensor_link";
+        tf_stamped.transform.translation.x = sensorPos.x();
+        tf_stamped.transform.translation.y = sensorPos.y();
+        tf_stamped.transform.translation.z = sensorPos.z();
+        tf_stamped.transform.rotation.x = sensorRot.x();
+        tf_stamped.transform.rotation.y = sensorRot.y();
+        tf_stamped.transform.rotation.z = sensorRot.z();
+        tf_stamped.transform.rotation.w = sensorRot.w();
+        tf_buffer->setTransform(tf_stamped, "default_authority", true);
+
+        auto stop_poly = std::make_shared<DummyPolygon>(node, "stop_poly", tf_buffer, "base_link", tf2::durationFromSec(0.0));
+        stop_poly->injectPolygon(make_arc_polygon(0.81, 160.0));
+        auto slow_poly = std::make_shared<DummyPolygon>(node, "slow_poly", tf_buffer, "base_link", tf2::durationFromSec(0.0));
+        slow_poly->injectPolygon(make_arc_polygon(1.11, 160.0));
+
+        auto source = std::make_shared<DummyPointCloud>(node, "cloud_source", tf_buffer, "base_link", "odom", tf2::durationFromSec(0.0), rclcpp::Duration(1, 0), false);
+        node->declare_parameter("cloud_source.min_height", 0.1);
+        node->declare_parameter("cloud_source.max_height", 2.0);
+        node->declare_parameter("cloud_source.topic", "dummy");
+        source->configure();
+
+        auto msg = std::make_shared<sensor_msgs::msg::PointCloud2>();
+        msg->header.frame_id = "sensor_link";
+        msg->header.stamp = node->get_clock()->now();
+        msg->height = height;
+        msg->width = width;
+        msg->point_step = point_step;
+        msg->row_step = row_step;
+        msg->is_dense = true;
+        msg->data.assign(cloud_bytes.begin(), cloud_bytes.end());
+        
+        sensor_msgs::msg::PointField x_f, y_f, z_f;
+        x_f.name = "x"; x_f.offset = x_off; x_f.datatype = sensor_msgs::msg::PointField::FLOAT32; x_f.count = 1;
+        y_f.name = "y"; y_f.offset = y_off; y_f.datatype = sensor_msgs::msg::PointField::FLOAT32; y_f.count = 1;
+        z_f.name = "z"; z_f.offset = z_off; z_f.datatype = sensor_msgs::msg::PointField::FLOAT32; z_f.count = 1;
+        msg->fields = {x_f, y_f, z_f};
+
+        source->injectData(msg);
+
+        auto cm_workload = [&]() {
+            std::vector<nav2_collision_monitor::Point> points2d;
+            source->getData(node->get_clock()->now(), points2d);
+            int stop_pts = stop_poly->getPointsInside(points2d);
+            int slow_pts = slow_poly->getPointsInside(points2d);
+            (void)stop_pts; // Prevent unused warning
+            (void)slow_pts;
+        };
+        results.push_back(measure_performance("Nav2_CollisionMonitor_PC_100k", cm_workload));
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -466,6 +569,57 @@ int main(int argc, char *argv[]) {
     auto workload = [&]() { checker.check(ranges, true); };
 
     results.push_back(measure_performance("CriticalZone_Dense_Scan", workload));
+
+    // --- Nav2 Collision Monitor Integration (TEST 4) ---
+    {
+        auto node = std::make_shared<nav2_util::LifecycleNode>("cm_node_4");
+        auto tf_buffer = std::make_shared<tf2_ros::Buffer>(node->get_clock());
+        tf_buffer->setUsingDedicatedThread(true);
+
+        geometry_msgs::msg::TransformStamped tf_stamped;
+        tf_stamped.header.stamp = node->get_clock()->now();
+        tf_stamped.header.frame_id = "base_link";
+        tf_stamped.child_frame_id = "sensor_link";
+        tf_stamped.transform.translation.x = sensorPos.x();
+        tf_stamped.transform.translation.y = sensorPos.y();
+        tf_stamped.transform.translation.z = sensorPos.z();
+        tf_stamped.transform.rotation.x = sensorRot.x();
+        tf_stamped.transform.rotation.y = sensorRot.y();
+        tf_stamped.transform.rotation.z = sensorRot.z();
+        tf_stamped.transform.rotation.w = sensorRot.w();
+        tf_buffer->setTransform(tf_stamped, "default_authority", true);
+
+        auto stop_poly = std::make_shared<DummyPolygon>(node, "stop_poly", tf_buffer, "base_link", tf2::durationFromSec(0.0));
+        stop_poly->injectPolygon(make_arc_polygon(0.81, 160.0));
+        auto slow_poly = std::make_shared<DummyPolygon>(node, "slow_poly", tf_buffer, "base_link", tf2::durationFromSec(0.0));
+        slow_poly->injectPolygon(make_arc_polygon(1.11, 160.0));
+
+        auto source = std::make_shared<DummyScan>(node, "scan_source", tf_buffer, "base_link", "odom", tf2::durationFromSec(0.0), rclcpp::Duration(1, 0), false);
+        node->declare_parameter("scan_source.topic", "dummy");
+        source->configure();
+
+        auto msg = std::make_shared<sensor_msgs::msg::LaserScan>();
+        msg->header.frame_id = "sensor_link";
+        msg->header.stamp = node->get_clock()->now();
+        msg->angle_min = -M_PI;
+        msg->angle_max = M_PI;
+        msg->angle_increment = angle_step;
+        msg->range_min = 0.1;
+        msg->range_max = 20.0;
+        
+        msg->ranges.assign(ranges.begin(), ranges.end());
+        source->injectData(msg);
+
+        auto cm_workload = [&]() {
+            std::vector<nav2_collision_monitor::Point> points2d;
+            source->getData(node->get_clock()->now(), points2d);
+            int stop_pts = stop_poly->getPointsInside(points2d);
+            int slow_pts = slow_poly->getPointsInside(points2d);
+            (void)stop_pts;
+            (void)slow_pts;
+        };
+        results.push_back(measure_performance("Nav2_CollisionMonitor_Scan_3600", cm_workload));
+    }
   }
 
   save_results_to_json(platform_alias, results, output_path);

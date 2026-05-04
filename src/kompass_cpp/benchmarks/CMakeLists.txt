@@ -35,6 +35,7 @@ find_package(nav2_core REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(nav2_msgs REQUIRED)
 find_package(PCL REQUIRED)
+find_package(nav2_collision_monitor REQUIRED)
 
 include(FetchContent)
 FetchContent_Declare(
@@ -51,6 +52,7 @@ target_include_directories(kompass_benchmark PRIVATE
     ${nav2_core_INCLUDE_DIRS}
     ${geometry_msgs_INCLUDE_DIRS}
     ${nav2_msgs_INCLUDE_DIRS}
+    ${nav2_collision_monitor_INCLUDE_DIRS}
 )
 
 target_link_libraries(kompass_benchmark PRIVATE
@@ -63,6 +65,7 @@ target_link_libraries(kompass_benchmark PRIVATE
     ${geometry_msgs_LIBRARIES}
     ${nav2_msgs_LIBRARIES}
     ${PCL_LIBRARIES}
+    ${nav2_collision_monitor_LIBRARIES}
     bonxai_core
     bonxai_map
 )
