@@ -1,1 +1,0 @@
-/usr/bin/c++  -O3 -DNDEBUG --std=c++17 -fPIC -Wall CMakeFiles/test_serialization.dir/test_serialization.cpp.o -o test_serialization 
