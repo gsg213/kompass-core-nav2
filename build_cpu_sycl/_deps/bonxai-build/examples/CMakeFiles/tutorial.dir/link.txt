@@ -1,0 +1,1 @@
+/usr/bin/c++  -O3 -DNDEBUG --std=c++17 -fPIC -Wall CMakeFiles/tutorial.dir/tutorial.cpp.o -o tutorial 

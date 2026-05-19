@@ -17,9 +17,9 @@
 #include <nav2_mppi_controller/models/state.hpp>
 #include <nav2_mppi_controller/models/trajectories.hpp>
 #include <nav2_mppi_controller/models/path.hpp>
-#include <nav2_costmap_2d/costmap_2d_ros.hpp>
 #include <xtensor/xtensor.hpp>
-#include <bonxai_map/probabilistic_map.hpp>
+#include <nav2_costmap_2d/costmap_2d.hpp>
+#include <nav2_costmap_2d/cost_values.hpp>
 #include <nav2_collision_monitor/polygon.hpp>
 #include <nav2_collision_monitor/pointcloud.hpp>
 #include <nav2_collision_monitor/scan.hpp>
@@ -143,6 +143,20 @@ void generate_mapping_scan(size_t num_points, std::vector<double> &ranges,
 // 2. MAIN RUNNER
 // =================================================================================
 
+class PublicCostmap2D : public nav2_costmap_2d::Costmap2D {
+public:
+    using Costmap2D::Costmap2D;
+    
+    template<class ActionType>
+    inline void publicRaytraceLine(
+        ActionType at, unsigned int x0, unsigned int y0, unsigned int x1,
+        unsigned int y1,
+        unsigned int max_length = UINT_MAX, unsigned int min_length = 0)
+    {
+        raytraceLine(at, x0, y0, x1, y1, max_length, min_length);
+    }
+};
+
 std::vector<nav2_collision_monitor::Point> make_arc_polygon(double radius, double angle_deg, int segments = 30) {
     std::vector<nav2_collision_monitor::Point> poly;
     poly.push_back({0.0, 0.0});
@@ -231,7 +245,7 @@ int main(int argc, char *argv[]) {
     
     // Declare critics parameter
     node->declare_parameter("nav2_mppi_benchmark_node.critics", std::vector<std::string>{"PathAlignCritic", "PathFollowCritic"});
-    
+    // find about 5 critics for collision check
     auto param_handler = std::make_unique<mppi::ParametersHandler>(node);
     
     // Initialize Critic Manager
@@ -321,32 +335,50 @@ int main(int argc, char *argv[]) {
 
     results.push_back(measure_performance("Mapper_Dense_400x400", workload));
 
-    // --- Bonxai Integration ---
+    // --- Nav2 Costmap2D Integration ---
     {
-        // 1. Data Conversion Helper
-        std::vector<Bonxai::ProbabilisticMap::Vector3D> bonxai_points;
-        bonxai_points.reserve(ranges.size());
+        // 1. Setup Costmap2D
+        // 400x400 cells, 0.05 res. Origin at -10.0, -10.0 so sensor is centered.
+        PublicCostmap2D costmap(400, 400, 0.05, -10.0, -10.0);
+        
+        // 2. Data Conversion Helper
+        std::vector<std::pair<unsigned int, unsigned int>> hit_points;
+        hit_points.reserve(ranges.size());
+        
+        unsigned int sensor_x, sensor_y;
+        costmap.worldToMap(0.0, 0.0, sensor_x, sensor_y);
+
         for (size_t i = 0; i < ranges.size(); ++i) {
             double r = ranges[i];
             double a = angles[i];
-            bonxai_points.push_back({r * std::cos(a), r * std::sin(a), 0.0});
+            double px = r * std::cos(a);
+            double py = r * std::sin(a);
+            
+            unsigned int mx, my;
+            if (costmap.worldToMap(px, py, mx, my)) {
+                hit_points.push_back({mx, my});
+            }
         }
-        Bonxai::ProbabilisticMap::Vector3D sensor_origin = {0.0, 0.0, 0.0};
 
-        // 2. Setup Probabilistic Map
-        Bonxai::ProbabilisticMap::Options options;
-        options.prob_hit_log = Bonxai::ProbabilisticMap::logods(0.6f);
-        options.prob_miss_log = Bonxai::ProbabilisticMap::logods(0.4f);
-        options.clamp_max_log = Bonxai::ProbabilisticMap::logods(0.9f);
-        options.clamp_min_log = Bonxai::ProbabilisticMap::logods(0.1f);
-        
-        Bonxai::ProbabilisticMap bonxai_map(0.05);
-        bonxai_map.setOptions(options);
-        
-        auto bonxai_workload = [&]() {
-            bonxai_map.insertPointCloud(bonxai_points, sensor_origin, 20.0);
+        struct ClearCell {
+            unsigned char* cmap;
+            ClearCell(unsigned char* cmap) : cmap(cmap) {}
+            inline void operator()(unsigned int offset) {
+                cmap[offset] = nav2_costmap_2d::FREE_SPACE;
+            }
         };
-        results.push_back(measure_performance("Bonxai_Dense_400x400", bonxai_workload));
+        ClearCell clear_cell(costmap.getCharMap());
+
+        auto nav2_workload = [&]() {
+            for (const auto& pt : hit_points) {
+                // Raytrace free space from sensor to hit point
+                costmap.publicRaytraceLine(clear_cell, sensor_x, sensor_y, pt.first, pt.second);
+                // Mark obstacle
+                costmap.setCost(pt.first, pt.second, nav2_costmap_2d::LETHAL_OBSTACLE);
+            }
+        };
+        
+        results.push_back(measure_performance("Nav2_costmap_Dense_400x400", nav2_workload));
     }
   }
 
@@ -502,7 +534,7 @@ int main(int argc, char *argv[]) {
             (void)stop_pts; // Prevent unused warning
             (void)slow_pts;
         };
-        results.push_back(measure_performance("Nav2_CollisionMonitor_PC_100k", cm_workload));
+        results.push_back(measure_performance("Nav2_CollisionMonitor_100k_Cloud", cm_workload));
     }
   }
 
@@ -618,7 +650,7 @@ int main(int argc, char *argv[]) {
             (void)stop_pts;
             (void)slow_pts;
         };
-        results.push_back(measure_performance("Nav2_CollisionMonitor_Scan_3600", cm_workload));
+        results.push_back(measure_performance("Nav2_CollisionMonitor_Dense_Scan", cm_workload));
     }
   }
 

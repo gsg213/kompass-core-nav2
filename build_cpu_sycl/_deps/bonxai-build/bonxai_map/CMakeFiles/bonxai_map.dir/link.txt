@@ -1,0 +1,2 @@
+/usr/bin/ar qc libbonxai_map.a CMakeFiles/bonxai_map.dir/src/pcl_utils.cpp.o CMakeFiles/bonxai_map.dir/src/probabilistic_map.cpp.o
+/usr/bin/ranlib libbonxai_map.a

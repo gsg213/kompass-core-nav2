@@ -1,0 +1,3 @@
+/workspace/kompass-core/build_cpu_sycl/_deps/bonxai-subbuild/CMakeFiles/bonxai-populate.dir
+/workspace/kompass-core/build_cpu_sycl/_deps/bonxai-subbuild/CMakeFiles/edit_cache.dir
+/workspace/kompass-core/build_cpu_sycl/_deps/bonxai-subbuild/CMakeFiles/rebuild_cache.dir
