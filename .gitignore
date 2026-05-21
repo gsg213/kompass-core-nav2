@@ -71,6 +71,18 @@ tests/*.csv
 *compile_flags.txt
 *.clangd
 
+# CMake build artifacts (in case CMake is run in-source)
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+CTestTestfile.cmake
+Makefile
+
 # Benchmarking
 benchmark_files
 src/kompass_cpp/benchmarks/*.png
+# Generated benchmark result files (regenerate by running the suite)
+/benchmark_*.json
+# Stray ament/colcon build output created by running cmake inside the
+# benchmarks directory instead of a dedicated build/ dir
+src/kompass_cpp/benchmarks/benchmarks/
