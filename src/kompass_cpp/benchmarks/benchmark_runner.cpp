@@ -244,13 +244,14 @@ int main(int argc, char *argv[]) {
     auto node = std::make_shared<nav2_util::LifecycleNode>("nav2_mppi_benchmark_node");
     
     // Declare critics parameter
-    node->declare_parameter("nav2_mppi_benchmark_node.critics", std::vector<std::string>{"PathAlignCritic", "PathFollowCritic"});
+    node->declare_parameter("nav2_mppi_benchmark_node.critics", std::vector<std::string>{"PathAlignCritic", "GoalCritic", "PathFollowCritic", "ObstaclesCritic"});
     // find about 5 critics for collision check
     auto param_handler = std::make_unique<mppi::ParametersHandler>(node);
     
     // Initialize Critic Manager
     mppi::CriticManager critic_manager;
     auto dummy_costmap = std::make_shared<nav2_costmap_2d::Costmap2DROS>("dummy_costmap");
+    dummy_costmap->configure();
     
     // Configure the manager (loads plugins and parameters)
     critic_manager.on_configure(node, "nav2_mppi_benchmark_node", dummy_costmap, param_handler.get());

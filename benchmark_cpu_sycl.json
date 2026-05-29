@@ -2,61 +2,61 @@
     "benchmarks": [
         {
             "iterations": 50,
-            "max_ms": 57.046371,
-            "mean_ms": 38.53624380000001,
-            "min_ms": 34.631171,
-            "std_dev_ms": 3.4622804619187564,
+            "max_ms": 0.000162,
+            "mean_ms": 3.942e-05,
+            "min_ms": 2.6e-05,
+            "std_dev_ms": 2.1107429971457923e-05,
             "test_name": "Nav2_MPPI_CriticManager_5k_Trajs"
         },
         {
             "iterations": 50,
-            "max_ms": 158.110748,
-            "mean_ms": 139.82959631999998,
-            "min_ms": 113.330303,
-            "std_dev_ms": 11.873601406710414,
+            "max_ms": 157.391327,
+            "mean_ms": 134.58183376000005,
+            "min_ms": 116.189961,
+            "std_dev_ms": 9.862590902201253,
             "test_name": "Mapper_Dense_400x400"
         },
         {
             "iterations": 50,
-            "max_ms": 8.214913,
-            "mean_ms": 5.358904019999999,
-            "min_ms": 4.612965,
-            "std_dev_ms": 1.0540560452181047,
-            "test_name": "Bonxai_Dense_400x400"
+            "max_ms": 1.093293,
+            "mean_ms": 0.81572924,
+            "min_ms": 0.780254,
+            "std_dev_ms": 0.06067421795509569,
+            "test_name": "Nav2_costmap_Dense_400x400"
         },
         {
             "iterations": 50,
-            "max_ms": 5.598722,
-            "mean_ms": 4.2637256400000005,
-            "min_ms": 3.672555,
-            "std_dev_ms": 0.367458988216249,
+            "max_ms": 4.859697,
+            "mean_ms": 3.899463340000001,
+            "min_ms": 3.173851,
+            "std_dev_ms": 0.2891857012991052,
             "test_name": "CriticalZone_100k_Cloud"
         },
         {
             "iterations": 50,
-            "max_ms": 10.728503,
-            "mean_ms": 7.5887478,
-            "min_ms": 6.365888,
-            "std_dev_ms": 0.836026524207129,
+            "max_ms": 7.669622,
+            "mean_ms": 6.636487939999999,
+            "min_ms": 6.138553,
+            "std_dev_ms": 0.35859326952282594,
             "test_name": "Nav2_CollisionMonitor_100k_Cloud"
         },
         {
             "iterations": 50,
-            "max_ms": 0.04454,
-            "mean_ms": 0.025586260000000006,
-            "min_ms": 0.023646,
-            "std_dev_ms": 0.0035171652552018974,
+            "max_ms": 0.029374,
+            "mean_ms": 0.023758299999999996,
+            "min_ms": 0.023536,
+            "std_dev_ms": 0.0008036064521892674,
             "test_name": "CriticalZone_Dense_Scan"
         },
         {
             "iterations": 50,
-            "max_ms": 0.845335,
-            "mean_ms": 0.51501778,
-            "min_ms": 0.459235,
-            "std_dev_ms": 0.08332973930315374,
+            "max_ms": 0.489925,
+            "mean_ms": 0.46246215999999984,
+            "min_ms": 0.458182,
+            "std_dev_ms": 0.005591175219442416,
             "test_name": "Nav2_CollisionMonitor_Dense_Scan"
         }
     ],
     "platform": "CPU_SYCL",
-    "timestamp": 1778166731
+    "timestamp": 1780044716
 }
