@@ -10,23 +10,24 @@
 #include "utils/cost_evaluator.h"
 
 // --- ROS 2 and Nav2 MPPI ---
-#include <rclcpp/rclcpp.hpp>
-#include <nav2_util/lifecycle_node.hpp>
-#include <nav2_mppi_controller/critic_manager.hpp>
-#include <nav2_mppi_controller/tools/parameters_handler.hpp>
-#include <nav2_mppi_controller/models/state.hpp>
-#include <nav2_mppi_controller/models/trajectories.hpp>
-#include <nav2_mppi_controller/models/path.hpp>
-#include <xtensor/xtensor.hpp>
-#include <nav2_costmap_2d/costmap_2d.hpp>
-#include <nav2_costmap_2d/cost_values.hpp>
-#include <nav2_collision_monitor/polygon.hpp>
+#include <geometry_msgs/msg/transform_stamped.hpp>
 #include <nav2_collision_monitor/pointcloud.hpp>
+#include <nav2_collision_monitor/polygon.hpp>
 #include <nav2_collision_monitor/scan.hpp>
 #include <nav2_collision_monitor/types.hpp>
-#include <sensor_msgs/msg/point_cloud2.hpp>
+#include <nav2_costmap_2d/cost_values.hpp>
+#include <nav2_costmap_2d/costmap_2d.hpp>
+#include <nav2_costmap_2d/inflation_layer.hpp>
+#include <nav2_mppi_controller/critic_manager.hpp>
+#include <nav2_mppi_controller/models/path.hpp>
+#include <nav2_mppi_controller/models/state.hpp>
+#include <nav2_mppi_controller/models/trajectories.hpp>
+#include <nav2_mppi_controller/tools/parameters_handler.hpp>
+#include <nav2_util/lifecycle_node.hpp>
+#include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/laser_scan.hpp>
-#include <geometry_msgs/msg/transform_stamped.hpp>
+#include <sensor_msgs/msg/point_cloud2.hpp>
+#include <xtensor/xtensor.hpp>
 
 // --- Conditional Includes ---
 #ifdef GPU
@@ -110,21 +111,21 @@ generate_heavy_trajectory_samples(double predictionHorizon, double timeStep,
 }
 
 std::vector<int8_t> generate_heavy_pointcloud_bytes(size_t num_points) {
-    // Create a temporary vector of strict types to ensure alignment
-    std::vector<PointXYZ> temp_points(num_points);
+  // Create a temporary vector of strict types to ensure alignment
+  std::vector<PointXYZ> temp_points(num_points);
 
-    for (size_t i = 0; i < num_points; ++i) {
-        temp_points[i].x = (rand() % 2000) / 100.0f - 10.0f;
-        temp_points[i].y = (rand() % 2000) / 100.0f - 10.0f;
-        temp_points[i].z = (rand() % 300) / 100.0f;
-        temp_points[i].padding = 0.0f;
-    }
+  for (size_t i = 0; i < num_points; ++i) {
+    temp_points[i].x = (rand() % 2000) / 100.0f - 10.0f;
+    temp_points[i].y = (rand() % 2000) / 100.0f - 10.0f;
+    temp_points[i].z = (rand() % 300) / 100.0f;
+    temp_points[i].padding = 0.0f;
+  }
 
-    // Memcpy into the byte buffer
-    std::vector<int8_t> buffer(num_points * sizeof(PointXYZ));
-    std::memcpy(buffer.data(), temp_points.data(), buffer.size());
+  // Memcpy into the byte buffer
+  std::vector<int8_t> buffer(num_points * sizeof(PointXYZ));
+  std::memcpy(buffer.data(), temp_points.data(), buffer.size());
 
-    return buffer;
+  return buffer;
 }
 
 // Generates varied laserscan data for Mapping
@@ -145,58 +146,59 @@ void generate_mapping_scan(size_t num_points, std::vector<double> &ranges,
 
 class PublicCostmap2D : public nav2_costmap_2d::Costmap2D {
 public:
-    using Costmap2D::Costmap2D;
-    
-    template<class ActionType>
-    inline void publicRaytraceLine(
-        ActionType at, unsigned int x0, unsigned int y0, unsigned int x1,
-        unsigned int y1,
-        unsigned int max_length = UINT_MAX, unsigned int min_length = 0)
-    {
-        raytraceLine(at, x0, y0, x1, y1, max_length, min_length);
-    }
+  using Costmap2D::Costmap2D;
+
+  template <class ActionType>
+  inline void publicRaytraceLine(ActionType at, unsigned int x0,
+                                 unsigned int y0, unsigned int x1,
+                                 unsigned int y1,
+                                 unsigned int max_length = UINT_MAX,
+                                 unsigned int min_length = 0) {
+    raytraceLine(at, x0, y0, x1, y1, max_length, min_length);
+  }
 };
 
-std::vector<nav2_collision_monitor::Point> make_arc_polygon(double radius, double angle_deg, int segments = 30) {
-    std::vector<nav2_collision_monitor::Point> poly;
-    poly.push_back({0.0, 0.0});
-    double half_angle = (angle_deg / 2.0) * M_PI / 180.0;
-    double step = (2.0 * half_angle) / segments;
-    for (int i = 0; i <= segments; ++i) {
-        double a = -half_angle + i * step;
-        poly.push_back({radius * std::cos(a), radius * std::sin(a)});
-    }
-    return poly;
+std::vector<nav2_collision_monitor::Point>
+make_arc_polygon(double radius, double angle_deg, int segments = 30) {
+  std::vector<nav2_collision_monitor::Point> poly;
+  poly.push_back({0.0, 0.0});
+  double half_angle = (angle_deg / 2.0) * M_PI / 180.0;
+  double step = (2.0 * half_angle) / segments;
+  for (int i = 0; i <= segments; ++i) {
+    double a = -half_angle + i * step;
+    poly.push_back({radius * std::cos(a), radius * std::sin(a)});
+  }
+  return poly;
 }
 
 class DummyPointCloud : public nav2_collision_monitor::PointCloud {
 public:
-    using PointCloud::PointCloud;
-    void injectData(sensor_msgs::msg::PointCloud2::ConstSharedPtr msg) {
-        dataCallback(msg);
-    }
+  using PointCloud::PointCloud;
+  void injectData(sensor_msgs::msg::PointCloud2::ConstSharedPtr msg) {
+    dataCallback(msg);
+  }
 };
 
 class DummyScan : public nav2_collision_monitor::Scan {
 public:
-    using Scan::Scan;
-    void injectData(sensor_msgs::msg::LaserScan::ConstSharedPtr msg) {
-        dataCallback(msg);
-    }
+  using Scan::Scan;
+  void injectData(sensor_msgs::msg::LaserScan::ConstSharedPtr msg) {
+    dataCallback(msg);
+  }
 };
 
 class DummyPolygon : public nav2_collision_monitor::Polygon {
 public:
-    using Polygon::Polygon;
-    void injectPolygon(const std::vector<nav2_collision_monitor::Point>& points) {
-        poly_ = points;
-    }
+  using Polygon::Polygon;
+  void injectPolygon(const std::vector<nav2_collision_monitor::Point> &points) {
+    poly_ = points;
+  }
 };
 
 int main(int argc, char *argv[]) {
   // 1. Setup Logging
   Kompass::setLogLevel(Kompass::LogLevel::INFO);
-  
+
   // Setup ROS 2 for Nav2 MPPI Controller
   rclcpp::init(argc, argv);
 
@@ -239,70 +241,169 @@ int main(int argc, char *argv[]) {
     Control::LinearVelocityControlParams x_p(1, 3, 5), y_p(1, 3, 5);
     Control::AngularVelocityControlParams a_p(3.14, 3, 5, 8);
     Control::ControlLimitsParams limits(x_p, y_p, a_p);
-    
-    // Create Nav2 MPPI Controller Node & Parameter Handler
-    auto node = std::make_shared<nav2_util::LifecycleNode>("nav2_mppi_benchmark_node");
-    
-    // Declare critics parameter
-    node->declare_parameter("nav2_mppi_benchmark_node.critics", std::vector<std::string>{"PathAlignCritic", "GoalCritic", "PathFollowCritic", "ObstaclesCritic"});
-    // find about 5 critics for collision check
-    auto param_handler = std::make_unique<mppi::ParametersHandler>(node);
-    
-    // Initialize Critic Manager
-    mppi::CriticManager critic_manager;
-    auto dummy_costmap = std::make_shared<nav2_costmap_2d::Costmap2DROS>("dummy_costmap");
-    dummy_costmap->configure();
-    
-    // Configure the manager (loads plugins and parameters)
-    critic_manager.on_configure(node, "nav2_mppi_benchmark_node", dummy_costmap, param_handler.get());
-    
-    // Prepare Critic Data
-    mppi::models::State state;
-    mppi::models::Trajectories nav2_trajectories;
-    mppi::models::Path nav2_path;
-    
-    nav2_trajectories.reset(numTrajectories, predictionHorizon / timeStep);
-    nav2_path.reset(reference_path.getSize());
-    
-    // Fill reference path
-    for (size_t i = 0; i < reference_path.getSize(); ++i) {
+
+    // --- Shared obstacle field (world frame, robot at origin) ----------------
+    // NOTE: Two walls parallel to the path, just outside the linear-fluctuation
+    // envelope (peak |y| ~= 1.25 m). The SAME points feed both the kompass
+    // obstacle-distance cost with setPointScan and the Nav2 ObstaclesCritic
+    // with costmap, so both sides evaluate identical obstacles.
+    std::vector<Path::Point> obstacle_cloud;
+    for (double ox = 1.0; ox <= 10.0; ox += 0.05) {
+      obstacle_cloud.emplace_back(ox, 1.7, 0.0);
+      obstacle_cloud.emplace_back(ox, -1.7, 0.0);
+    }
+    const float max_sensor_range = 10.0f;
+
+    // --- Kompass Core Cost Evaluator ---
+    Control::CostEvaluator::TrajectoryCostsWeights weights;
+    weights.setParameter("reference_path_distance_weight", 1.0);
+    weights.setParameter("smoothness_weight", 1.0);
+    weights.setParameter("jerk_weight", 1.0);
+    weights.setParameter("goal_distance_weight", 1.0);
+    weights.setParameter("obstacles_distance_weight", 1.0);
+
+    Control::CostEvaluator costEval(weights, limits, numTrajectories,
+                                    predictionHorizon / timeStep, 1000);
+
+    // Inject the shared obstacles (robot at origin, identity sensor transform)
+    // so the obstacles_distance cost is exercised
+    costEval.setPointScan(obstacle_cloud, Path::State(), max_sensor_range);
+
+    auto workload = [&]() {
+      costEval.getMinTrajectoryCost(samples, &reference_path,
+                                    reference_path.getSegment(0));
+    };
+
+    results.push_back(measure_performance("CostEvaluator_5k_Trajs", workload));
+
+    // --- Nav2 MPPI CriticManager Integration ---
+    {
+      // Create Nav2 MPPI Controller Node & Parameter Handler
+      auto node = std::make_shared<nav2_util::LifecycleNode>(
+          "nav2_mppi_benchmark_node");
+
+      // Declare critics parameter
+      node->declare_parameter(
+          "nav2_mppi_benchmark_node.critics",
+          std::vector<std::string>{"PathAlignCritic", "GoalCritic",
+                                   "PathFollowCritic", "ObstaclesCritic"});
+      // find about 5 critics for collision check
+      auto param_handler = std::make_unique<mppi::ParametersHandler>(node);
+
+      // Initialize Critic Manager
+      mppi::CriticManager critic_manager;
+      auto dummy_costmap =
+          std::make_shared<nav2_costmap_2d::Costmap2DROS>("dummy_costmap");
+
+      // NOTE: Size the costmap to cover the trajectory + obstacle region and
+      // give it a deterministic inflation layer, so ObstaclesCritic produces
+      // graded proximity costs (the analog of the kompass obstacles_distance
+      // cost) rather than collision-only checks. Params are set on the
+      // costmap node before configure() so on_configure() picks them up.
+      auto set_cm_param = [&](const std::string &k,
+                              const rclcpp::ParameterValue &v) {
+        if (!dummy_costmap->has_parameter(k))
+          dummy_costmap->declare_parameter(k, v);
+        else
+          dummy_costmap->set_parameter(rclcpp::Parameter(k, v));
+      };
+      set_cm_param("width", rclcpp::ParameterValue(16));
+      set_cm_param("height", rclcpp::ParameterValue(16));
+      set_cm_param("resolution", rclcpp::ParameterValue(0.05));
+      set_cm_param("origin_x", rclcpp::ParameterValue(-3.0));
+      set_cm_param("origin_y", rclcpp::ParameterValue(-8.0));
+      set_cm_param("robot_radius", rclcpp::ParameterValue(0.3));
+      set_cm_param("track_unknown_space", rclcpp::ParameterValue(false));
+      set_cm_param("inflation_layer.inflation_radius",
+                   rclcpp::ParameterValue(0.55));
+      set_cm_param("inflation_layer.cost_scaling_factor",
+                   rclcpp::ParameterValue(3.0));
+      dummy_costmap->configure();
+
+      // Stamp the shared obstacles into the costmap and inflate them, so the
+      // critic sees the SAME obstacles as the kompass setPointScan above.
+      // updateCosts() is invoked directly (rather than the full update
+      // pipeline, which would reset the master grid)
+      {
+        auto *cm = dummy_costmap->getCostmap();
+        for (const auto &p : obstacle_cloud) {
+          unsigned int mx, my;
+          if (cm->worldToMap(p.x(), p.y(), mx, my))
+            cm->setCost(mx, my, nav2_costmap_2d::LETHAL_OBSTACLE);
+        }
+        auto *plugins = dummy_costmap->getLayeredCostmap()->getPlugins();
+        for (auto &layer : *plugins) {
+          auto infl =
+              std::dynamic_pointer_cast<nav2_costmap_2d::InflationLayer>(layer);
+          if (infl)
+            infl->updateCosts(*cm, 0, 0, cm->getSizeInCellsX(),
+                              cm->getSizeInCellsY());
+        }
+      }
+
+      // Configure the manager (loads plugins and parameters)
+      critic_manager.on_configure(node, "nav2_mppi_benchmark_node",
+                                  dummy_costmap, param_handler.get());
+
+      // Prepare Critic Data
+      mppi::models::State state;
+      mppi::models::Trajectories nav2_trajectories;
+      mppi::models::Path nav2_path;
+
+      nav2_trajectories.reset(numTrajectories, predictionHorizon / timeStep);
+      nav2_path.reset(reference_path.getSize());
+
+      // Fill reference path
+      for (size_t i = 0; i < reference_path.getSize(); ++i) {
         nav2_path.x(i) = reference_path.getIndex(i).x();
         nav2_path.y(i) = reference_path.getIndex(i).y();
         nav2_path.yaws(i) = reference_path.getIndex(i).z();
-    }
-    
-    // Fill trajectories from Kompass generated samples
-    for (int i = 0; i < numTrajectories; ++i) {
+      }
+
+      // Fill trajectories from Kompass generated samples
+      for (int i = 0; i < numTrajectories; ++i) {
         auto traj = samples->getIndex(i);
         for (size_t j = 0; j < traj.path.numPointsPerTrajectory_; ++j) {
-            nav2_trajectories.x(i, j) = traj.path.x(j);
-            nav2_trajectories.y(i, j) = traj.path.y(j);
-            nav2_trajectories.yaws(i, j) = traj.path.z(j);
+          nav2_trajectories.x(i, j) = traj.path.x(j);
+          nav2_trajectories.y(i, j) = traj.path.y(j);
+          nav2_trajectories.yaws(i, j) = traj.path.z(j);
         }
+      }
+
+      xt::xtensor<float, 1> costs =
+          xt::zeros<float>({(unsigned long)numTrajectories});
+      float dt = timeStep;
+
+      mppi::CriticData critic_data{
+          state,
+          nav2_trajectories,
+          nav2_path,
+          costs,
+          dt,
+          false,   // fail_flag
+          nullptr, // goal_checker
+          nullptr, // motion_model
+          std::make_optional<std::vector<bool>>(reference_path.getSize(),
+                                                true), // path_pts_valid
+          std::make_optional<size_t>(reference_path.getSize() -
+                                     1) // furthest_reached_path_point
+      };
+
+      auto nav2_workload = [&]() {
+        // Reset accumulators each iteration. evalTrajectoriesScores
+        // accumulates into costs and ObstaclesCritic latches
+        // critic_data.fail_flag once every trajectory collides; without these
+        // resets, costs would grow unbounded across iterations and a latched
+        // fail_flag would short-circuit the loop on subsequent calls.
+        costs.fill(0.0f);
+        critic_data.fail_flag = false;
+        // Nav2 MPPI Equivalent evaluation
+        critic_manager.evalTrajectoriesScores(critic_data);
+      };
+
+      results.push_back(measure_performance("Nav2_MPPI_CriticManager_5k_Trajs",
+                                            nav2_workload));
     }
-    
-    xt::xtensor<float, 1> costs = xt::zeros<float>({(unsigned long)numTrajectories});
-    float dt = timeStep;
-    
-    mppi::CriticData critic_data{
-        state,
-        nav2_trajectories,
-        nav2_path,
-        costs,
-        dt,
-        false, // fail_flag
-        nullptr, // goal_checker
-        nullptr, // motion_model
-        std::make_optional<std::vector<bool>>(reference_path.getSize(), true), // path_pts_valid
-        std::make_optional<size_t>(reference_path.getSize() - 1) // furthest_reached_path_point
-    };
-
-    auto workload = [&]() {
-      // Nav2 MPPI Equivalent evaluation
-      critic_manager.evalTrajectoriesScores(critic_data);
-    };
-
-    results.push_back(measure_performance("Nav2_MPPI_CriticManager_5k_Trajs", workload));
   }
 
   // -------------------------------------------------------------------------
@@ -338,48 +439,51 @@ int main(int argc, char *argv[]) {
 
     // --- Nav2 Costmap2D Integration ---
     {
-        // 1. Setup Costmap2D
-        // 400x400 cells, 0.05 res. Origin at -10.0, -10.0 so sensor is centered.
-        PublicCostmap2D costmap(400, 400, 0.05, -10.0, -10.0);
-        
-        // 2. Data Conversion Helper
-        std::vector<std::pair<unsigned int, unsigned int>> hit_points;
-        hit_points.reserve(ranges.size());
-        
-        unsigned int sensor_x, sensor_y;
-        costmap.worldToMap(0.0, 0.0, sensor_x, sensor_y);
+      // 1. Setup Costmap2D
+      // 400x400 cells, 0.05 res. Origin at -10.0, -10.0 so sensor is centered.
+      PublicCostmap2D costmap(400, 400, 0.05, -10.0, -10.0);
 
-        for (size_t i = 0; i < ranges.size(); ++i) {
-            double r = ranges[i];
-            double a = angles[i];
-            double px = r * std::cos(a);
-            double py = r * std::sin(a);
-            
-            unsigned int mx, my;
-            if (costmap.worldToMap(px, py, mx, my)) {
-                hit_points.push_back({mx, my});
-            }
+      // 2. Data Conversion Helper
+      std::vector<std::pair<unsigned int, unsigned int>> hit_points;
+      hit_points.reserve(ranges.size());
+
+      unsigned int sensor_x, sensor_y;
+      costmap.worldToMap(0.0, 0.0, sensor_x, sensor_y);
+
+      for (size_t i = 0; i < ranges.size(); ++i) {
+        double r = ranges[i];
+        double a = angles[i];
+        double px = r * std::cos(a);
+        double py = r * std::sin(a);
+
+        unsigned int mx, my;
+        if (costmap.worldToMap(px, py, mx, my)) {
+          hit_points.push_back({mx, my});
         }
+      }
 
-        struct ClearCell {
-            unsigned char* cmap;
-            ClearCell(unsigned char* cmap) : cmap(cmap) {}
-            inline void operator()(unsigned int offset) {
-                cmap[offset] = nav2_costmap_2d::FREE_SPACE;
-            }
-        };
-        ClearCell clear_cell(costmap.getCharMap());
+      struct ClearCell {
+        unsigned char *cmap;
+        ClearCell(unsigned char *cmap) : cmap(cmap) {}
+        inline void operator()(unsigned int offset) {
+          cmap[offset] = nav2_costmap_2d::FREE_SPACE;
+        }
+      };
+      ClearCell clear_cell(costmap.getCharMap());
 
-        auto nav2_workload = [&]() {
-            for (const auto& pt : hit_points) {
-                // Raytrace free space from sensor to hit point
-                costmap.publicRaytraceLine(clear_cell, sensor_x, sensor_y, pt.first, pt.second);
-                // Mark obstacle
-                costmap.setCost(pt.first, pt.second, nav2_costmap_2d::LETHAL_OBSTACLE);
-            }
-        };
-        
-        results.push_back(measure_performance("Nav2_costmap_Dense_400x400", nav2_workload));
+      auto nav2_workload = [&]() {
+        for (const auto &pt : hit_points) {
+          // Raytrace free space from sensor to hit point
+          costmap.publicRaytraceLine(clear_cell, sensor_x, sensor_y, pt.first,
+                                     pt.second);
+          // Mark obstacle
+          costmap.setCost(pt.first, pt.second,
+                          nav2_costmap_2d::LETHAL_OBSTACLE);
+        }
+      };
+
+      results.push_back(
+          measure_performance("Nav2_costmap_Dense_400x400", nav2_workload));
     }
   }
 
@@ -396,9 +500,9 @@ int main(int argc, char *argv[]) {
     const int height = 400;
     const int width = 400;
     const float res = 0.05f;
-    const int scan_size = 3600;  // matches the laserscan benchmark
+    const int scan_size = 3600; // matches the laserscan benchmark
     const float angle_step = static_cast<float>(2.0 * M_PI / scan_size);
-    const int max_points_per_line = 256;  // warp-multiple WG size, see TEST 2
+    const int max_points_per_line = 256; // warp-multiple WG size, see TEST 2
 
     // Z-filter matches the critical-zone pointcloud benchmark so in-zone
     // points survive and out-of-zone ones get rejected on device.
@@ -427,12 +531,9 @@ int main(int argc, char *argv[]) {
                         static_cast<float>(z_off));
     };
 
-    results.push_back(
-        measure_performance("Mapper_PointCloud_100k", workload));
+    results.push_back(measure_performance("Mapper_PointCloud_100k", workload));
   }
 #endif
-
-
 
   // -------------------------------------------------------------------------
   // TEST 3: CRITICAL ZONE (Point Cloud)
@@ -481,61 +582,75 @@ int main(int argc, char *argv[]) {
 
     // --- Nav2 Collision Monitor Integration (TEST 3) ---
     {
-        auto node = std::make_shared<nav2_util::LifecycleNode>("cm_node_3");
-        auto tf_buffer = std::make_shared<tf2_ros::Buffer>(node->get_clock());
-        tf_buffer->setUsingDedicatedThread(true);
+      auto node = std::make_shared<nav2_util::LifecycleNode>("cm_node_3");
+      auto tf_buffer = std::make_shared<tf2_ros::Buffer>(node->get_clock());
+      tf_buffer->setUsingDedicatedThread(true);
 
-        geometry_msgs::msg::TransformStamped tf_stamped;
-        tf_stamped.header.stamp = node->get_clock()->now();
-        tf_stamped.header.frame_id = "base_link";
-        tf_stamped.child_frame_id = "sensor_link";
-        tf_stamped.transform.translation.x = sensorPos.x();
-        tf_stamped.transform.translation.y = sensorPos.y();
-        tf_stamped.transform.translation.z = sensorPos.z();
-        tf_stamped.transform.rotation.x = sensorRot.x();
-        tf_stamped.transform.rotation.y = sensorRot.y();
-        tf_stamped.transform.rotation.z = sensorRot.z();
-        tf_stamped.transform.rotation.w = sensorRot.w();
-        tf_buffer->setTransform(tf_stamped, "default_authority", true);
+      geometry_msgs::msg::TransformStamped tf_stamped;
+      tf_stamped.header.stamp = node->get_clock()->now();
+      tf_stamped.header.frame_id = "base_link";
+      tf_stamped.child_frame_id = "sensor_link";
+      tf_stamped.transform.translation.x = sensorPos.x();
+      tf_stamped.transform.translation.y = sensorPos.y();
+      tf_stamped.transform.translation.z = sensorPos.z();
+      tf_stamped.transform.rotation.x = sensorRot.x();
+      tf_stamped.transform.rotation.y = sensorRot.y();
+      tf_stamped.transform.rotation.z = sensorRot.z();
+      tf_stamped.transform.rotation.w = sensorRot.w();
+      tf_buffer->setTransform(tf_stamped, "default_authority", true);
 
-        auto stop_poly = std::make_shared<DummyPolygon>(node, "stop_poly", tf_buffer, "base_link", tf2::durationFromSec(0.0));
-        stop_poly->injectPolygon(make_arc_polygon(0.81, 160.0));
-        auto slow_poly = std::make_shared<DummyPolygon>(node, "slow_poly", tf_buffer, "base_link", tf2::durationFromSec(0.0));
-        slow_poly->injectPolygon(make_arc_polygon(1.11, 160.0));
+      auto stop_poly = std::make_shared<DummyPolygon>(
+          node, "stop_poly", tf_buffer, "base_link", tf2::durationFromSec(0.0));
+      stop_poly->injectPolygon(make_arc_polygon(0.81, 160.0));
+      auto slow_poly = std::make_shared<DummyPolygon>(
+          node, "slow_poly", tf_buffer, "base_link", tf2::durationFromSec(0.0));
+      slow_poly->injectPolygon(make_arc_polygon(1.11, 160.0));
 
-        auto source = std::make_shared<DummyPointCloud>(node, "cloud_source", tf_buffer, "base_link", "odom", tf2::durationFromSec(0.0), rclcpp::Duration(1, 0), false);
-        node->declare_parameter("cloud_source.min_height", 0.1);
-        node->declare_parameter("cloud_source.max_height", 2.0);
-        node->declare_parameter("cloud_source.topic", "dummy");
-        source->configure();
+      auto source = std::make_shared<DummyPointCloud>(
+          node, "cloud_source", tf_buffer, "base_link", "odom",
+          tf2::durationFromSec(0.0), rclcpp::Duration(1, 0), false);
+      node->declare_parameter("cloud_source.min_height", 0.1);
+      node->declare_parameter("cloud_source.max_height", 2.0);
+      node->declare_parameter("cloud_source.topic", "dummy");
+      source->configure();
 
-        auto msg = std::make_shared<sensor_msgs::msg::PointCloud2>();
-        msg->header.frame_id = "sensor_link";
-        msg->header.stamp = node->get_clock()->now();
-        msg->height = height;
-        msg->width = width;
-        msg->point_step = point_step;
-        msg->row_step = row_step;
-        msg->is_dense = true;
-        msg->data.assign(cloud_bytes.begin(), cloud_bytes.end());
-        
-        sensor_msgs::msg::PointField x_f, y_f, z_f;
-        x_f.name = "x"; x_f.offset = x_off; x_f.datatype = sensor_msgs::msg::PointField::FLOAT32; x_f.count = 1;
-        y_f.name = "y"; y_f.offset = y_off; y_f.datatype = sensor_msgs::msg::PointField::FLOAT32; y_f.count = 1;
-        z_f.name = "z"; z_f.offset = z_off; z_f.datatype = sensor_msgs::msg::PointField::FLOAT32; z_f.count = 1;
-        msg->fields = {x_f, y_f, z_f};
+      auto msg = std::make_shared<sensor_msgs::msg::PointCloud2>();
+      msg->header.frame_id = "sensor_link";
+      msg->header.stamp = node->get_clock()->now();
+      msg->height = height;
+      msg->width = width;
+      msg->point_step = point_step;
+      msg->row_step = row_step;
+      msg->is_dense = true;
+      msg->data.assign(cloud_bytes.begin(), cloud_bytes.end());
 
-        source->injectData(msg);
+      sensor_msgs::msg::PointField x_f, y_f, z_f;
+      x_f.name = "x";
+      x_f.offset = x_off;
+      x_f.datatype = sensor_msgs::msg::PointField::FLOAT32;
+      x_f.count = 1;
+      y_f.name = "y";
+      y_f.offset = y_off;
+      y_f.datatype = sensor_msgs::msg::PointField::FLOAT32;
+      y_f.count = 1;
+      z_f.name = "z";
+      z_f.offset = z_off;
+      z_f.datatype = sensor_msgs::msg::PointField::FLOAT32;
+      z_f.count = 1;
+      msg->fields = {x_f, y_f, z_f};
 
-        auto cm_workload = [&]() {
-            std::vector<nav2_collision_monitor::Point> points2d;
-            source->getData(node->get_clock()->now(), points2d);
-            int stop_pts = stop_poly->getPointsInside(points2d);
-            int slow_pts = slow_poly->getPointsInside(points2d);
-            (void)stop_pts; // Prevent unused warning
-            (void)slow_pts;
-        };
-        results.push_back(measure_performance("Nav2_CollisionMonitor_100k_Cloud", cm_workload));
+      source->injectData(msg);
+
+      auto cm_workload = [&]() {
+        std::vector<nav2_collision_monitor::Point> points2d;
+        source->getData(node->get_clock()->now(), points2d);
+        int stop_pts = stop_poly->getPointsInside(points2d);
+        int slow_pts = slow_poly->getPointsInside(points2d);
+        (void)stop_pts; // Prevent unused warning
+        (void)slow_pts;
+      };
+      results.push_back(
+          measure_performance("Nav2_CollisionMonitor_100k_Cloud", cm_workload));
     }
   }
 
@@ -605,53 +720,58 @@ int main(int argc, char *argv[]) {
 
     // --- Nav2 Collision Monitor Integration (TEST 4) ---
     {
-        auto node = std::make_shared<nav2_util::LifecycleNode>("cm_node_4");
-        auto tf_buffer = std::make_shared<tf2_ros::Buffer>(node->get_clock());
-        tf_buffer->setUsingDedicatedThread(true);
+      auto node = std::make_shared<nav2_util::LifecycleNode>("cm_node_4");
+      auto tf_buffer = std::make_shared<tf2_ros::Buffer>(node->get_clock());
+      tf_buffer->setUsingDedicatedThread(true);
 
-        geometry_msgs::msg::TransformStamped tf_stamped;
-        tf_stamped.header.stamp = node->get_clock()->now();
-        tf_stamped.header.frame_id = "base_link";
-        tf_stamped.child_frame_id = "sensor_link";
-        tf_stamped.transform.translation.x = sensorPos.x();
-        tf_stamped.transform.translation.y = sensorPos.y();
-        tf_stamped.transform.translation.z = sensorPos.z();
-        tf_stamped.transform.rotation.x = sensorRot.x();
-        tf_stamped.transform.rotation.y = sensorRot.y();
-        tf_stamped.transform.rotation.z = sensorRot.z();
-        tf_stamped.transform.rotation.w = sensorRot.w();
-        tf_buffer->setTransform(tf_stamped, "default_authority", true);
+      geometry_msgs::msg::TransformStamped tf_stamped;
+      tf_stamped.header.stamp = node->get_clock()->now();
+      tf_stamped.header.frame_id = "base_link";
+      tf_stamped.child_frame_id = "sensor_link";
+      tf_stamped.transform.translation.x = sensorPos.x();
+      tf_stamped.transform.translation.y = sensorPos.y();
+      tf_stamped.transform.translation.z = sensorPos.z();
+      tf_stamped.transform.rotation.x = sensorRot.x();
+      tf_stamped.transform.rotation.y = sensorRot.y();
+      tf_stamped.transform.rotation.z = sensorRot.z();
+      tf_stamped.transform.rotation.w = sensorRot.w();
+      tf_buffer->setTransform(tf_stamped, "default_authority", true);
 
-        auto stop_poly = std::make_shared<DummyPolygon>(node, "stop_poly", tf_buffer, "base_link", tf2::durationFromSec(0.0));
-        stop_poly->injectPolygon(make_arc_polygon(0.81, 160.0));
-        auto slow_poly = std::make_shared<DummyPolygon>(node, "slow_poly", tf_buffer, "base_link", tf2::durationFromSec(0.0));
-        slow_poly->injectPolygon(make_arc_polygon(1.11, 160.0));
+      auto stop_poly = std::make_shared<DummyPolygon>(
+          node, "stop_poly", tf_buffer, "base_link", tf2::durationFromSec(0.0));
+      stop_poly->injectPolygon(make_arc_polygon(0.81, 160.0));
+      auto slow_poly = std::make_shared<DummyPolygon>(
+          node, "slow_poly", tf_buffer, "base_link", tf2::durationFromSec(0.0));
+      slow_poly->injectPolygon(make_arc_polygon(1.11, 160.0));
 
-        auto source = std::make_shared<DummyScan>(node, "scan_source", tf_buffer, "base_link", "odom", tf2::durationFromSec(0.0), rclcpp::Duration(1, 0), false);
-        node->declare_parameter("scan_source.topic", "dummy");
-        source->configure();
+      auto source = std::make_shared<DummyScan>(
+          node, "scan_source", tf_buffer, "base_link", "odom",
+          tf2::durationFromSec(0.0), rclcpp::Duration(1, 0), false);
+      node->declare_parameter("scan_source.topic", "dummy");
+      source->configure();
 
-        auto msg = std::make_shared<sensor_msgs::msg::LaserScan>();
-        msg->header.frame_id = "sensor_link";
-        msg->header.stamp = node->get_clock()->now();
-        msg->angle_min = -M_PI;
-        msg->angle_max = M_PI;
-        msg->angle_increment = angle_step;
-        msg->range_min = 0.1;
-        msg->range_max = 20.0;
-        
-        msg->ranges.assign(ranges.begin(), ranges.end());
-        source->injectData(msg);
+      auto msg = std::make_shared<sensor_msgs::msg::LaserScan>();
+      msg->header.frame_id = "sensor_link";
+      msg->header.stamp = node->get_clock()->now();
+      msg->angle_min = -M_PI;
+      msg->angle_max = M_PI;
+      msg->angle_increment = angle_step;
+      msg->range_min = 0.1;
+      msg->range_max = 20.0;
 
-        auto cm_workload = [&]() {
-            std::vector<nav2_collision_monitor::Point> points2d;
-            source->getData(node->get_clock()->now(), points2d);
-            int stop_pts = stop_poly->getPointsInside(points2d);
-            int slow_pts = slow_poly->getPointsInside(points2d);
-            (void)stop_pts;
-            (void)slow_pts;
-        };
-        results.push_back(measure_performance("Nav2_CollisionMonitor_Dense_Scan", cm_workload));
+      msg->ranges.assign(ranges.begin(), ranges.end());
+      source->injectData(msg);
+
+      auto cm_workload = [&]() {
+        std::vector<nav2_collision_monitor::Point> points2d;
+        source->getData(node->get_clock()->now(), points2d);
+        int stop_pts = stop_poly->getPointsInside(points2d);
+        int slow_pts = slow_poly->getPointsInside(points2d);
+        (void)stop_pts;
+        (void)slow_pts;
+      };
+      results.push_back(
+          measure_performance("Nav2_CollisionMonitor_Dense_Scan", cm_workload));
     }
   }
 
