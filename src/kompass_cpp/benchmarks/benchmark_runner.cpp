@@ -441,26 +441,16 @@ int main(int argc, char *argv[]) {
     {
       // 1. Setup Costmap2D
       // 400x400 cells, 0.05 res. Origin at -10.0, -10.0 so sensor is centered.
-      PublicCostmap2D costmap(400, 400, 0.05, -10.0, -10.0);
+      // Default value NO_INFORMATION so the per-frame reset + raytrace clearing
+      // mirror the kompass grid semantics (UNEXPLORED -> EMPTY along rays,
+      // OCCUPIED at the hit cell).
+      PublicCostmap2D costmap(400, 400, 0.05, -10.0, -10.0,
+                              nav2_costmap_2d::NO_INFORMATION);
 
-      // 2. Data Conversion Helper
-      std::vector<std::pair<unsigned int, unsigned int>> hit_points;
-      hit_points.reserve(ranges.size());
-
+      // The sensor origin in grid cells is a fixed parameter (robot pose),
+      // computed once
       unsigned int sensor_x, sensor_y;
       costmap.worldToMap(0.0, 0.0, sensor_x, sensor_y);
-
-      for (size_t i = 0; i < ranges.size(); ++i) {
-        double r = ranges[i];
-        double a = angles[i];
-        double px = r * std::cos(a);
-        double py = r * std::sin(a);
-
-        unsigned int mx, my;
-        if (costmap.worldToMap(px, py, mx, my)) {
-          hit_points.push_back({mx, my});
-        }
-      }
 
       struct ClearCell {
         unsigned char *cmap;
@@ -471,14 +461,23 @@ int main(int argc, char *argv[]) {
       };
       ClearCell clear_cell(costmap.getCharMap());
 
+      // Timed slice mirrors LocalMapperGPU::scanToGrid: reset the grid, then
+      // for every ray convert polar (angle, range) -> cartesian -> grid cell
+      // and raytrace free space + stamp the obstacle.
       auto nav2_workload = [&]() {
-        for (const auto &pt : hit_points) {
-          // Raytrace free space from sensor to hit point
-          costmap.publicRaytraceLine(clear_cell, sensor_x, sensor_y, pt.first,
-                                     pt.second);
-          // Mark obstacle
-          costmap.setCost(pt.first, pt.second,
-                          nav2_costmap_2d::LETHAL_OBSTACLE);
+        costmap.resetMap(0, 0, costmap.getSizeInCellsX(),
+                         costmap.getSizeInCellsY());
+        for (size_t i = 0; i < ranges.size(); ++i) {
+          double px = ranges[i] * std::cos(angles[i]);
+          double py = ranges[i] * std::sin(angles[i]);
+
+          unsigned int mx, my;
+          if (costmap.worldToMap(px, py, mx, my)) {
+            // Raytrace free space from sensor to hit point
+            costmap.publicRaytraceLine(clear_cell, sensor_x, sensor_y, mx, my);
+            // Mark obstacle
+            costmap.setCost(mx, my, nav2_costmap_2d::LETHAL_OBSTACLE);
+          }
         }
       };
 
