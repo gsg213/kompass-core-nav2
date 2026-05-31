@@ -1,0 +1,11 @@
+# Keep the build context (and image) lean
+.git
+.github
+**/build*/
+build_dependencies/AdaptiveCpp
+**/__pycache__/
+*.png
+*.json
+*.log
+interrogate_badge.svg
+docs/_build
