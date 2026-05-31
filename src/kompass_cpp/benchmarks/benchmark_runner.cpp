@@ -531,6 +531,81 @@ int main(int argc, char *argv[]) {
     };
 
     results.push_back(measure_performance("Mapper_PointCloud_100k", workload));
+
+    // --- Nav2 Costmap2D Integration (Point Cloud) ---
+    // Mirrors kompass two-stage pipeline. Reduce the same 100k
+    // cloud to a laserscan then raytrace + stamp it into the same Costmap2D
+    // used in TEST 2.
+    {
+      const int num_bins = scan_size;                 // 3600, matches kompass
+      const float inv_angle_step = 1.0f / angle_step; // bin = angle / angle_step
+
+      PublicCostmap2D costmap(400, 400, 0.05, -10.0, -10.0,
+                              nav2_costmap_2d::NO_INFORMATION);
+      unsigned int sensor_x, sensor_y;
+      costmap.worldToMap(0.0, 0.0, sensor_x, sensor_y);
+
+      struct ClearCell {
+        unsigned char *cmap;
+        ClearCell(unsigned char *cmap) : cmap(cmap) {}
+        inline void operator()(unsigned int offset) {
+          cmap[offset] = nav2_costmap_2d::FREE_SPACE;
+        }
+      };
+      ClearCell clear_cell(costmap.getCharMap());
+
+      std::vector<float> scan_ranges(num_bins);
+      auto read_f = [&](int p, int off) {
+        float v;
+        std::memcpy(&v, &cloud_bytes[p * point_step + off], sizeof(float));
+        return v;
+      };
+
+      auto nav2_pc_workload = [&]() {
+        costmap.resetMap(0, 0, costmap.getSizeInCellsX(),
+                         costmap.getSizeInCellsY());
+
+        // Stage 1: point cloud -> laserscan (per-bin nearest range, z-filtered).
+        std::fill(scan_ranges.begin(), scan_ranges.end(), range_max);
+        for (int p = 0; p < num_points; ++p) {
+          const float z = read_f(p, z_off);
+          if (z < min_h || z > max_h)
+            continue;
+          const float x = read_f(p, x_off);
+          const float y = read_f(p, y_off);
+          const float r2 = x * x + y * y;
+          if (r2 < 1e-6f)
+            continue;
+          float angle = std::atan2(y, x);
+          if (angle < 0.0f)
+            angle += static_cast<float>(2.0 * M_PI);
+          int bin = static_cast<int>(angle * inv_angle_step);
+          if (bin >= num_bins)
+            bin = num_bins - 1;
+          const float dist = std::sqrt(r2);
+          if (dist < scan_ranges[bin])
+            scan_ranges[bin] = dist;
+        }
+
+        // Stage 2: raytrace the reduced laserscan into the costmap.
+        for (int b = 0; b < num_bins; ++b) {
+          const float r = scan_ranges[b];
+          if (r >= range_max)
+            continue; // no obstacle closer than range_max in this bin
+          const double a = b * angle_step;
+          const double px = r * std::cos(a);
+          const double py = r * std::sin(a);
+          unsigned int mx, my;
+          if (costmap.worldToMap(px, py, mx, my)) {
+            costmap.publicRaytraceLine(clear_cell, sensor_x, sensor_y, mx, my);
+            costmap.setCost(mx, my, nav2_costmap_2d::LETHAL_OBSTACLE);
+          }
+        }
+      };
+
+      results.push_back(measure_performance("Nav2_costmap_PointCloud_100k",
+                                            nav2_pc_workload));
+    }
   }
 #endif
 
