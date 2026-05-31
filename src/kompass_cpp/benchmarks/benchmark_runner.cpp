@@ -9,6 +9,28 @@
 // --- Cost Evaluator ---
 #include "utils/cost_evaluator.h"
 
+// --- Build-mode switches (override via CMake -D) ---
+// BENCH_NAV2=0    : drop the Nav2 comparison.
+// BENCH_KOMPASS=0 : keep Nav2 but do not time/report the kompass-core
+//                   workloads.
+#ifndef BENCH_NAV2
+#define BENCH_NAV2 1
+#endif
+#ifndef BENCH_KOMPASS
+#define BENCH_KOMPASS 1
+#endif
+
+// Record a kompass-core workload only when BENCH_KOMPASS is enabled. When
+// disabled the workload is still constructed (it shares generated inputs with
+// the Nav2 side) but not timed, so the JSON carries only the Nav2 entries.
+#if BENCH_KOMPASS
+#define RECORD_KOMPASS(name, wl)                                               \
+  results.push_back(measure_performance((name), (wl)))
+#else
+#define RECORD_KOMPASS(name, wl) ((void)(wl))
+#endif
+
+#if BENCH_NAV2
 // --- ROS 2 and Nav2 MPPI ---
 #include <geometry_msgs/msg/transform_stamped.hpp>
 #include <nav2_collision_monitor/pointcloud.hpp>
@@ -28,6 +50,7 @@
 #include <sensor_msgs/msg/laser_scan.hpp>
 #include <sensor_msgs/msg/point_cloud2.hpp>
 #include <xtensor/xtensor.hpp>
+#endif // BENCH_NAV2
 
 // --- Conditional Includes ---
 #ifdef GPU
@@ -144,6 +167,7 @@ void generate_mapping_scan(size_t num_points, std::vector<double> &ranges,
 // 2. MAIN RUNNER
 // =================================================================================
 
+#if BENCH_NAV2
 class PublicCostmap2D : public nav2_costmap_2d::Costmap2D {
 public:
   using Costmap2D::Costmap2D;
@@ -194,13 +218,16 @@ public:
     poly_ = points;
   }
 };
+#endif // BENCH_NAV2
 
 int main(int argc, char *argv[]) {
   // 1. Setup Logging
   Kompass::setLogLevel(Kompass::LogLevel::INFO);
 
+#if BENCH_NAV2
   // Setup ROS 2 for Nav2 MPPI Controller
   rclcpp::init(argc, argv);
+#endif
 
   if (argc < 3) {
     LOG_ERROR("Usage: ./kompass_benchmark <platform_name> <output_json_path>");
@@ -274,8 +301,9 @@ int main(int argc, char *argv[]) {
                                     reference_path.getSegment(0));
     };
 
-    results.push_back(measure_performance("CostEvaluator_5k_Trajs", workload));
+    RECORD_KOMPASS("CostEvaluator_5k_Trajs", workload);
 
+#if BENCH_NAV2
     // --- Nav2 MPPI CriticManager Integration ---
     {
       // Create Nav2 MPPI Controller Node & Parameter Handler
@@ -404,6 +432,7 @@ int main(int argc, char *argv[]) {
       results.push_back(measure_performance("Nav2_MPPI_CriticManager_5k_Trajs",
                                             nav2_workload));
     }
+#endif // BENCH_NAV2
   }
 
   // -------------------------------------------------------------------------
@@ -435,8 +464,9 @@ int main(int argc, char *argv[]) {
     auto workload = [&]() { mapper.scanToGridBaysian(angles, ranges); };
 #endif
 
-    results.push_back(measure_performance("Mapper_Dense_400x400", workload));
+    RECORD_KOMPASS("Mapper_Dense_400x400", workload);
 
+#if BENCH_NAV2
     // --- Nav2 Costmap2D Integration ---
     {
       // 1. Setup Costmap2D
@@ -484,35 +514,25 @@ int main(int argc, char *argv[]) {
       results.push_back(
           measure_performance("Nav2_costmap_Dense_400x400", nav2_workload));
     }
+#endif // BENCH_NAV2
   }
 
   // -------------------------------------------------------------------------
-  // TEST 2b: MAPPING (Point Cloud → occupancy grid, GPU-only)
+  // TEST 2b: MAPPING (Point Cloud → occupancy grid)
   //
-  // Exercises the full pointcloud path: raw bytes → on-device
-  // pointcloud_to_laserscan kernel → ray-cast kernel → occupancy grid.
-  // Uses the same 100k synthetic cloud as CriticalZone_100k_Cloud so the
-  // two benchmarks read identical input.
+  // Exercises the full pointcloud path: raw bytes → pointcloud_to_laserscan
+  // reduction → ray-cast → occupancy grid. Uses the same 100k synthetic cloud
+  // as CriticalZone_100k_Cloud.
   // -------------------------------------------------------------------------
-#ifdef GPU
   {
-    const int height = 400;
-    const int width = 400;
-    const float res = 0.05f;
     const int scan_size = 3600; // matches the laserscan benchmark
     const float angle_step = static_cast<float>(2.0 * M_PI / scan_size);
-    const int max_points_per_line = 256; // warp-multiple WG size, see TEST 2
 
     // Z-filter matches the critical-zone pointcloud benchmark so in-zone
-    // points survive and out-of-zone ones get rejected on device.
+    // points survive and out-of-zone ones get rejected.
     const float min_h = 0.1f;
     const float max_h = 2.0f;
     const float range_max = 20.0f;
-
-    Mapping::LocalMapperGPU mapper(height, width, res, {0.0, 0.0, 0.0}, 0.0,
-                                   /*isPointCloud*/ true, scan_size, angle_step,
-                                   max_h, min_h, range_max,
-                                   max_points_per_line);
 
     auto cloud_bytes = generate_heavy_pointcloud_bytes(100000);
     const int point_step = sizeof(PointXYZ);
@@ -520,25 +540,38 @@ int main(int argc, char *argv[]) {
     const int y_off = offsetof(PointXYZ, y);
     const int z_off = offsetof(PointXYZ, z);
     const int num_points = cloud_bytes.size() / point_step;
+
+#ifdef GPU
+    // --- kompass GPU pointcloud mapper: raw bytes → pointcloud_to_laserscan
+    // kernel → ray-cast kernel → occupancy grid. GPU-only (LocalMapperGPU). ---
+    const int height = 400;
+    const int width = 400;
+    const float res = 0.05f;
+    const int max_points_per_line = 256; // warp-multiple WG size, see TEST 2
+    Mapping::LocalMapperGPU mapper(height, width, res, {0.0, 0.0, 0.0}, 0.0,
+                                   /*isPointCloud*/ true, scan_size, angle_step,
+                                   max_h, min_h, range_max,
+                                   max_points_per_line);
     const int pc_width = num_points;
     const int pc_height = 1;
     const int row_step = pc_width * point_step;
-
     auto workload = [&]() {
       mapper.scanToGrid(cloud_bytes, point_step, row_step, pc_height, pc_width,
                         static_cast<float>(x_off), static_cast<float>(y_off),
                         static_cast<float>(z_off));
     };
+    RECORD_KOMPASS("Mapper_PointCloud_100k", workload);
+#endif // GPU
 
-    results.push_back(measure_performance("Mapper_PointCloud_100k", workload));
-
+#if BENCH_NAV2
     // --- Nav2 Costmap2D Integration (Point Cloud) ---
     // Mirrors kompass two-stage pipeline. Reduce the same 100k
     // cloud to a laserscan then raytrace + stamp it into the same Costmap2D
     // used in TEST 2.
     {
-      const int num_bins = scan_size;                 // 3600, matches kompass
-      const float inv_angle_step = 1.0f / angle_step; // bin = angle / angle_step
+      const int num_bins = scan_size; // 3600, matches kompass
+      const float inv_angle_step =
+          1.0f / angle_step; // bin = angle / angle_step
 
       PublicCostmap2D costmap(400, 400, 0.05, -10.0, -10.0,
                               nav2_costmap_2d::NO_INFORMATION);
@@ -565,7 +598,8 @@ int main(int argc, char *argv[]) {
         costmap.resetMap(0, 0, costmap.getSizeInCellsX(),
                          costmap.getSizeInCellsY());
 
-        // Stage 1: point cloud -> laserscan (per-bin nearest range, z-filtered).
+        // Stage 1: point cloud -> laserscan (per-bin nearest range,
+        // z-filtered).
         std::fill(scan_ranges.begin(), scan_ranges.end(), range_max);
         for (int p = 0; p < num_points; ++p) {
           const float z = read_f(p, z_off);
@@ -606,8 +640,8 @@ int main(int argc, char *argv[]) {
       results.push_back(measure_performance("Nav2_costmap_PointCloud_100k",
                                             nav2_pc_workload));
     }
+#endif // BENCH_NAV2
   }
-#endif
 
   // -------------------------------------------------------------------------
   // TEST 3: CRITICAL ZONE (Point Cloud)
@@ -652,8 +686,9 @@ int main(int argc, char *argv[]) {
                     y_off, z_off, true);
     };
 
-    results.push_back(measure_performance("CriticalZone_100k_Cloud", workload));
+    RECORD_KOMPASS("CriticalZone_100k_Cloud", workload);
 
+#if BENCH_NAV2
     // --- Nav2 Collision Monitor Integration (TEST 3) ---
     {
       auto node = std::make_shared<nav2_util::LifecycleNode>("cm_node_3");
@@ -726,6 +761,7 @@ int main(int argc, char *argv[]) {
       results.push_back(
           measure_performance("Nav2_CollisionMonitor_100k_Cloud", cm_workload));
     }
+#endif // BENCH_NAV2
   }
 
   // -------------------------------------------------------------------------
@@ -790,8 +826,9 @@ int main(int argc, char *argv[]) {
 
     auto workload = [&]() { checker.check(ranges, true); };
 
-    results.push_back(measure_performance("CriticalZone_Dense_Scan", workload));
+    RECORD_KOMPASS("CriticalZone_Dense_Scan", workload);
 
+#if BENCH_NAV2
     // --- Nav2 Collision Monitor Integration (TEST 4) ---
     {
       auto node = std::make_shared<nav2_util::LifecycleNode>("cm_node_4");
@@ -847,11 +884,14 @@ int main(int argc, char *argv[]) {
       results.push_back(
           measure_performance("Nav2_CollisionMonitor_Dense_Scan", cm_workload));
     }
+#endif // BENCH_NAV2
   }
 
   save_results_to_json(platform_alias, results, output_path);
   LOG_INFO("Benchmark suite completed.");
+#if BENCH_NAV2
   rclcpp::shutdown();
+#endif
 
   return 0;
 }
