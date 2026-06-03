@@ -108,9 +108,9 @@ The plots below visualize the performance differences across platforms for vario
 _Note: This chart excludes runs where power monitoring was active to ensure timing accuracy._
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/benchmark_log_dark.png">
-  <source media="(prefers-color-scheme: light)" srcset="docs/benchmark_log_light.png">
-  <img alt="Benchmark Results" src="docs/benchmark_log_light.png">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/benchmark_dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="docs/benchmark_light.png">
+  <img alt="Benchmark Results" src="docs/benchmark_light.png">
 </picture>
 
 ## Copyright
