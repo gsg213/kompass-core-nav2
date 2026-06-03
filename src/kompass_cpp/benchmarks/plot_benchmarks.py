@@ -5,6 +5,24 @@ import sys
 import os
 
 # Configuration
+# Same-SoC comparison: each accelerator platform is scored against the Nav2 CPU
+# baseline measured on THAT SAME SoC's host CPU (not a single shared baseline).
+# Map: accelerator platform -> (its own-SoC Nav2 CPU platform, short labels).
+SOC_BASELINE = {
+    "Jetson_Orin_CUDA": ("Nav2_Jetson_Orin_CPU_MAX", "CUDA", "Jetson CPU"),
+    "AMD_Strix_ROCm":   ("Nav2_Strix_x86_CPU",       "ROCm", "Strix CPU"),
+}
+# Nav2 emits component-specific test names; map each onto the matching kompass
+# workload name so the CPU baseline and the kompass kernel land in the SAME
+# subplot. (Benchmark output stays unmodified; this normalization is plot-only.)
+WORKLOAD_ALIAS = {
+    "Nav2_MPPI_CriticManager_5k_Trajs": "CostEvaluator_5k_Trajs",
+    "Nav2_costmap_Dense_400x400":       "Mapper_Dense_400x400",
+    "Nav2_costmap_PointCloud_100k":     "Mapper_PointCloud_100k",
+    "Nav2_CollisionMonitor_100k_Cloud": "CriticalZone_100k_Cloud",
+    "Nav2_CollisionMonitor_Dense_Scan": "CriticalZone_Dense_Scan",
+}
+# Kept for backward-compat / fallback only; per-SoC mapping above takes priority.
 BASELINE_PLATFORM = "Nav2_Jetson_Orin_CPU"
 COLORS = ["#4E79A7", "#F28E2B", "#E15759", "#76B7B2", "#59A14F", "#EDC948", "#B07AA1"]
 
@@ -40,7 +58,10 @@ def load_data():
 
                 platform = data["platform"]
                 for bench in data["benchmarks"]:
-                    test_name = bench["test_name"]
+                    # Normalize Nav2 names onto the shared kompass workload name.
+                    test_name = WORKLOAD_ALIAS.get(
+                        bench["test_name"], bench["test_name"]
+                    )
                     if test_name not in all_benchmarks:
                         all_benchmarks[test_name] = []
 
@@ -189,46 +210,31 @@ def generate_perf_chart(
                 color=c["text"],
             )
 
-        # Baseline Logic
-        baseline_record = next(
-            (r for r in results if r["platform"] == baseline_name), None
-        )
-        if not baseline_record:  # Fallback
-            baseline_record = next(
-                (
-                    r
-                    for r in results
-                    if "CPU" in r["platform"] and "Native" in r["platform"]
-                ),
-                None,
-            )
+        # Same-SoC speedups: each accelerator vs its OWN-SoC Nav2 CPU baseline.
+        by_platform = {r["platform"]: r["mean"] for r in results}
+        lines = []
+        for accel, (cpu, accel_lbl, cpu_lbl) in SOC_BASELINE.items():
+            if accel in by_platform and cpu in by_platform and by_platform[accel] > 0:
+                speedup = by_platform[cpu] / by_platform[accel]
+                lines.append(f"{accel_lbl}: {speedup:.1f}x vs {cpu_lbl}")
 
-        if baseline_record and len(means) > 1:
-            baseline_time = baseline_record["mean"]
-            real_base_name = baseline_record["platform"]
-            fastest_time = min(means)
-            if fastest_time > 0:
-                speedup = baseline_time / fastest_time
-                txt = (
-                    f"Baseline: {real_base_name}"
-                    if speedup < 1.05
-                    else f"Max Speedup vs baseline: {speedup:.1f}x"
-                )
-                ax.text(
-                    0.95,
-                    0.9,
-                    txt,
-                    transform=ax.transAxes,
-                    ha="right",
-                    fontsize=12,
-                    color=c["text"],
-                    bbox={
-                        "facecolor": c["annot_bg"],
-                        "alpha": 0.7,
-                        "edgecolor": c["text"],
-                        "linewidth": 0.5,
-                    },
-                )
+        if lines:
+            ax.text(
+                0.95,
+                0.9,
+                "\n".join(lines),
+                transform=ax.transAxes,
+                ha="right",
+                va="top",
+                fontsize=12,
+                color=c["text"],
+                bbox={
+                    "facecolor": c["annot_bg"],
+                    "alpha": 0.7,
+                    "edgecolor": c["text"],
+                    "linewidth": 0.5,
+                },
+            )
 
     plt.tight_layout()
     output_path = os.path.join(DOCS_DIR, output_filename)
@@ -364,9 +370,9 @@ def generate_power_chart(data_map, output_filename, theme="light"):
 if __name__ == "__main__":
     data = load_data()
 
-    # 1. Performance Charts (Only Pure Runs, Log Scale)
-    generate_perf_chart(data, "benchmark_log_light.png", theme="light")
-    generate_perf_chart(data, "benchmark_log_dark.png", theme="dark")
+    # 1. Performance Charts (absolute latency, linear scale)
+    generate_perf_chart(data, "benchmark_light.png", theme="light")
+    generate_perf_chart(data, "benchmark_dark.png", theme="dark")
 
     # 2. Power and Efficiency Charts (Only Runs With Power)
     generate_power_chart(data, "benchmark_power_light.png", theme="light")
