@@ -103,24 +103,14 @@ Includes wrappers and integrations with external planning and collision librarie
 
 The plots below visualize the performance differences across platforms for various components of the navigation stack. The **Logarithmic Scale** plot is essential for comparing CPU vs. GPU performance where differences can be orders of magnitude large. See the [benchmarking details](src/kompass_cpp/benchmarks/README.md) for how these plots were generated and what tasks were measured.
 
-### 1. Performance (Logarithmic Scale)
+### 1. Performance
 
 _Note: This chart excludes runs where power monitoring was active to ensure timing accuracy._
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/benchmark_log_dark.png">
   <source media="(prefers-color-scheme: light)" srcset="docs/benchmark_log_light.png">
-  <img alt="Logarithmic Benchmark Results" src="docs/benchmark_log_light.png">
-</picture>
-
-### 2. Power Consumption & Efficiency
-
-_Note: Efficiency is calculated as **Operations per Joule** (Throughput / Watts). Higher is better._
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/benchmark_power_dark.png">
-  <source media="(prefers-color-scheme: light)" srcset="docs/benchmark_power_light.png">
-  <img alt="Power Efficiency Results" src="docs/benchmark_power_light.png">
+  <img alt="Benchmark Results" src="docs/benchmark_log_light.png">
 </picture>
 
 ## Copyright
