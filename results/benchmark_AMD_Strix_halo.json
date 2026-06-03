@@ -1,0 +1,46 @@
+{
+    "benchmarks": [
+        {
+            "iterations": 50,
+            "max_ms": 8.384841,
+            "mean_ms": 8.184607300000003,
+            "min_ms": 8.014808,
+            "std_dev_ms": 0.09076832917461072,
+            "test_name": "CostEvaluator_5k_Trajs"
+        },
+        {
+            "iterations": 50,
+            "max_ms": 0.302717,
+            "mean_ms": 0.22564620000000005,
+            "min_ms": 0.212488,
+            "std_dev_ms": 0.01502038111633546,
+            "test_name": "Mapper_Dense_400x400"
+        },
+        {
+            "iterations": 50,
+            "max_ms": 0.278742,
+            "mean_ms": 0.23796186000000008,
+            "min_ms": 0.220553,
+            "std_dev_ms": 0.010415311880129284,
+            "test_name": "Mapper_PointCloud_100k"
+        },
+        {
+            "iterations": 50,
+            "max_ms": 0.067707,
+            "mean_ms": 0.05550925999999998,
+            "min_ms": 0.04838,
+            "std_dev_ms": 0.00499458810638096,
+            "test_name": "CriticalZone_100k_Cloud"
+        },
+        {
+            "iterations": 50,
+            "max_ms": 0.090138,
+            "mean_ms": 0.025952060000000006,
+            "min_ms": 0.022903,
+            "std_dev_ms": 0.00992559073387572,
+            "test_name": "CriticalZone_Dense_Scan"
+        }
+    ],
+    "platform": "AMD_Strix_ROCm",
+    "timestamp": 1778922296
+}

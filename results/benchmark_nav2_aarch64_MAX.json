@@ -1,0 +1,46 @@
+{
+    "benchmarks": [
+        {
+            "iterations": 50,
+            "max_ms": 103.197844,
+            "mean_ms": 100.52514396000002,
+            "min_ms": 100.284189,
+            "std_dev_ms": 0.3939461145382308,
+            "test_name": "Nav2_MPPI_CriticManager_5k_Trajs"
+        },
+        {
+            "iterations": 50,
+            "max_ms": 1.052665,
+            "mean_ms": 0.9818799799999997,
+            "min_ms": 0.972604,
+            "std_dev_ms": 0.012213373449632801,
+            "test_name": "Nav2_costmap_Dense_400x400"
+        },
+        {
+            "iterations": 50,
+            "max_ms": 5.645676,
+            "mean_ms": 5.583146100000001,
+            "min_ms": 5.544688,
+            "std_dev_ms": 0.01653341575568978,
+            "test_name": "Nav2_costmap_PointCloud_100k"
+        },
+        {
+            "iterations": 50,
+            "max_ms": 8.075217,
+            "mean_ms": 8.052613340000002,
+            "min_ms": 8.031507,
+            "std_dev_ms": 0.009483387887458433,
+            "test_name": "Nav2_CollisionMonitor_100k_Cloud"
+        },
+        {
+            "iterations": 50,
+            "max_ms": 0.69415,
+            "mean_ms": 0.59349264,
+            "min_ms": 0.588298,
+            "std_dev_ms": 0.015209355433758481,
+            "test_name": "Nav2_CollisionMonitor_Dense_Scan"
+        }
+    ],
+    "platform": "Nav2_Jetson_Orin_CPU_MAX",
+    "timestamp": 1780484251
+}

@@ -1,0 +1,46 @@
+{
+    "benchmarks": [
+        {
+            "iterations": 50,
+            "max_ms": 66.757616,
+            "mean_ms": 66.40905179999997,
+            "min_ms": 65.464863,
+            "std_dev_ms": 0.3047977512792608,
+            "test_name": "CostEvaluator_5k_Trajs"
+        },
+        {
+            "iterations": 50,
+            "max_ms": 1.54406,
+            "mean_ms": 1.2503596200000002,
+            "min_ms": 1.166388,
+            "std_dev_ms": 0.06272034792948,
+            "test_name": "Mapper_Dense_400x400"
+        },
+        {
+            "iterations": 50,
+            "max_ms": 1.659188,
+            "mean_ms": 1.6177897399999999,
+            "min_ms": 1.271118,
+            "std_dev_ms": 0.0532675196853896,
+            "test_name": "Mapper_PointCloud_100k"
+        },
+        {
+            "iterations": 50,
+            "max_ms": 0.751567,
+            "mean_ms": 0.7011063600000002,
+            "min_ms": 0.683603,
+            "std_dev_ms": 0.012362416729354873,
+            "test_name": "CriticalZone_100k_Cloud"
+        },
+        {
+            "iterations": 50,
+            "max_ms": 0.291245,
+            "mean_ms": 0.24024036000000001,
+            "min_ms": 0.186068,
+            "std_dev_ms": 0.016991020804836457,
+            "test_name": "CriticalZone_Dense_Scan"
+        }
+    ],
+    "platform": "Jetson_Orin_CUDA",
+    "timestamp": 1780483765
+}

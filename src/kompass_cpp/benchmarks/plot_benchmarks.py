@@ -5,7 +5,7 @@ import sys
 import os
 
 # Configuration
-BASELINE_PLATFORM = "RK3588_CPU"
+BASELINE_PLATFORM = "Nav2_Jetson_Orin_CPU"
 COLORS = ["#4E79A7", "#F28E2B", "#E15759", "#76B7B2", "#59A14F", "#EDC948", "#B07AA1"]
 
 # Determine the absolute path to the docs folder
@@ -142,7 +142,7 @@ def generate_perf_chart(
         means = [r["mean"] for r in results]
         errors = [r["std_dev"] for r in results]
 
-        setup_ax_style(ax, c, log_scale=True)
+        setup_ax_style(ax, c, log_scale=False)
 
         x_pos = range(len(platforms))
         bars = ax.bar(
@@ -165,7 +165,7 @@ def generate_perf_chart(
             color=c["text"],
         )
         ax.set_ylabel(
-            "Time (ms) - Log Scale",
+            "Time (ms)",
             fontsize=12,
             fontweight="bold",
             labelpad=10,
@@ -175,11 +175,12 @@ def generate_perf_chart(
         ax.set_xticklabels(platforms, fontsize=11, fontweight="500", color=c["text"])
 
         # Labels and speedup
+        label_offset = max(means) * 0.02
         for bar in bars:
             height = bar.get_height()
             ax.text(
                 bar.get_x() + bar.get_width() / 2.0,
-                height * 1.15,
+                height + label_offset,
                 f"{height:.2f} ms",
                 ha="center",
                 va="bottom",
