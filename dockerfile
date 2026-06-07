@@ -12,6 +12,12 @@ FROM ros:humble-ros-base
 
 ENV DEBIAN_FRONTEND=noninteractive
 
+# Optional board-power monitoring (reads the host's INA3221 rails via /sys).
+# Build a power-instrumented image with:
+# docker build --build-arg ENABLE_POWER_MONITOR=ON
+# and run with /sys access (-- privileged).
+ARG ENABLE_POWER_MONITOR=OFF
+
 # kompass-core C++ build deps + the ROS 2 Humble Nav2 comparison packages.
 RUN apt-get update && apt-get install -y --no-install-recommends \
       build-essential \
@@ -44,7 +50,8 @@ RUN . /opt/ros/humble/setup.sh && \
     cmake -S /workspace -B /workspace/build_nav2_ref \
       -DCMAKE_BUILD_TYPE=Release \
       -DFORCE_CPU_BUILD=ON \
-      -DBENCHMARK_WITH_KOMPASS=OFF && \
+      -DBENCHMARK_WITH_KOMPASS=OFF \
+      -DENABLE_POWER_MONITOR=${ENABLE_POWER_MONITOR} && \
     cmake --build /workspace/build_nav2_ref --target kompass_benchmark -j"$(nproc)" && \
     chmod +x /workspace/src/kompass_cpp/benchmarks/run_nav2_reference.sh
 
