@@ -717,7 +717,11 @@ int main(int argc, char *argv[]) {
 
       auto source = std::make_shared<DummyPointCloud>(
           node, "cloud_source", tf_buffer, "base_link", "odom",
-          tf2::durationFromSec(0.0), rclcpp::Duration(1, 0), false);
+          // Large source_timeout: the cloud is injected once with a fixed
+          // stamp, so a short (1s) timeout makes the collision monitor reject
+          // it as stale on any run that exceeds 1s. We want to time the
+          // processing, not the staleness guard, so disable it.
+          tf2::durationFromSec(0.0), rclcpp::Duration(3600, 0), false);
       node->declare_parameter("cloud_source.min_height", 0.1);
       node->declare_parameter("cloud_source.max_height", 2.0);
       node->declare_parameter("cloud_source.topic", "dummy");
@@ -857,7 +861,8 @@ int main(int argc, char *argv[]) {
 
       auto source = std::make_shared<DummyScan>(
           node, "scan_source", tf_buffer, "base_link", "odom",
-          tf2::durationFromSec(0.0), rclcpp::Duration(1, 0), false);
+          // Large source_timeout to keep the scan from being rejected
+          tf2::durationFromSec(0.0), rclcpp::Duration(3600, 0), false);
       node->declare_parameter("scan_source.topic", "dummy");
       source->configure();
 
