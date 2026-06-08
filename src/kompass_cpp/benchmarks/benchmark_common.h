@@ -17,6 +17,7 @@
 // Only include if power monitoring is enabled
 #ifdef ENABLE_POWER_MONITOR
 #include <atomic>
+#include <cstdlib>
 #include <filesystem>
 #include <regex>
 #include <thread>
@@ -277,6 +278,9 @@ BenchmarkResult measure_performance(std::string name, Func &&func,
   std::cout << std::endl;
 
   power_mon.start();
+#ifdef ENABLE_POWER_MONITOR
+  auto bench_start = std::chrono::high_resolution_clock::now();
+#endif
 
   for (int i = 0; i < iterations; ++i) {
     std::cout << "\r" << BM_CYAN << "       [Status] " << BM_RESET
@@ -290,6 +294,32 @@ BenchmarkResult measure_performance(std::string name, Func &&func,
     std::chrono::duration<double, std::milli> ms = end - start;
     times.push_back(ms.count());
   }
+
+#ifdef ENABLE_POWER_MONITOR
+  // Power "sustain": a fixed 50-iteration window is too short for the 20 Hz
+  // monitor on sub-millisecond kernels. Keep exercising the workload
+  // until a wall-time budget elapses, so the board reaches steady state and
+  // the monitor collects many samples. Default 3s.
+  {
+    double power_seconds = 3.0;
+    if (const char *env = std::getenv("KOMPASS_BENCH_POWER_SECONDS"))
+      power_seconds = std::atof(env);
+    if (power_seconds > 0.0) {
+      long fill = 0;
+      while (std::chrono::duration<double>(
+                 std::chrono::high_resolution_clock::now() - bench_start)
+                 .count() < power_seconds) {
+        func();
+        ++fill;
+      }
+      if (fill > 0) {
+        std::cout << "\r" << BM_CYAN << "       [Status] " << BM_RESET
+                  << "Power sustain: +" << fill << " iters to ~" << power_seconds
+                  << " s..." << BM_RESET << std::endl;
+      }
+    }
+  }
+#endif
 
   double avg_watts = power_mon.stop();
 
